@@ -51,6 +51,7 @@ const PhotoLightbox = ({ src, onClose }) => (
 
 const Execution = () => {
   const { user } = useAuth();
+  const { checklists: cloudChecklists, submissions: cloudSubmissions, supportInbox: cloudSupport, updateFirebase, employees } = useData();
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
@@ -58,14 +59,12 @@ const Execution = () => {
   const scanName = queryParams.get('scanName');
 
   const [checklists, setChecklists] = useState([]);
-  const [filteredChecklists, setFilteredChecklists] = useState([]);
   const [selectedFrequency, setSelectedFrequency] = useState('Daily');
+  const [filteredChecklists, setFilteredChecklists] = useState([]);
   const [statusUpdates, setStatusUpdates] = useState({});
   const [remarks, setRemarks] = useState({});
-  const [supportDetails, setSupportDetails] = useState({}); // { id: { dept, assignedTo } }
-  const [photos, setPhotos] = useState({}); // { id: base64 }
-  const [lightboxPhoto, setLightboxPhoto] = useState(null);
-  const [isScanning, setIsScanning] = useState(false);
+  const [supportDetails, setSupportDetails] = useState({});
+  const [photos, setPhotos] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const photoInputRefs = useRef({});
@@ -74,8 +73,7 @@ const Execution = () => {
     return user?.allowedActivity === 'ALL' || (Array.isArray(user?.allowedActivity) && user.allowedActivity.includes('ALL'));
   }, [user]);
 
-  const employees = JSON.parse(localStorage.getItem('pcms_employees') || '[]');
-  const departments = [...new Set(employees.map(e => e.Department).filter(Boolean))];
+  const departments = useMemo(() => [...new Set(employees.map(e => e.Department).filter(Boolean))], [employees]);
 
   const activityType = useMemo(() => {
     if (!user || user.allowedActivity === 'ALL') return null;
@@ -87,12 +85,11 @@ const Execution = () => {
   }, [user]);
 
   useEffect(() => {
-    const loaded = JSON.parse(localStorage.getItem('pcms_checklists') || '[]');
-    let accessible = loaded;
+    let accessible = cloudChecklists;
     
     if (user?.role === 'USER' && !isAllActivities) {
       const allowed = Array.isArray(user.allowedActivity) ? user.allowedActivity : [user.allowedActivity || ''];
-      accessible = loaded.filter(c => allowed.includes(c.Type_of_Activity));
+      accessible = cloudChecklists.filter(c => allowed.includes(c.Type_of_Activity));
     }
 
     if (scanLevel && scanName) {
@@ -101,7 +98,7 @@ const Execution = () => {
       else if (scanLevel === 'sub-line') accessible = accessible.filter(c => c.Sub_Line_Equipment === scanName);
     }
     setChecklists(accessible);
-  }, [user, scanLevel, scanName, isAllActivities]);
+  }, [user, scanLevel, scanName, isAllActivities, cloudChecklists]);
 
   useEffect(() => {
     const filtered = checklists.filter(c => c.Frequency === selectedFrequency);
@@ -115,7 +112,7 @@ const Execution = () => {
       initStatus[c.id] = 'Pending';
       initRemarks[c.id] = '';
       initSupport[c.id] = { dept: '', assignedTo: '' };
-      initPhotos[c.id] = [];
+      initPhotos[c.id] = null;
     });
 
     setStatusUpdates(initStatus);
@@ -138,11 +135,9 @@ const Execution = () => {
     }));
   };
 
-  const handleSubmitAll = () => {
+  const handleSubmitAll = async () => {
     if (filteredChecklists.length === 0) return;
     setIsSubmitting(true);
-    const submittedData = JSON.parse(localStorage.getItem('pcms_submitted_checklists') || '[]');
-    const supportInbox = JSON.parse(localStorage.getItem('pcms_support_inbox') || '[]');
     const now = new Date();
 
     const newRecords = filteredChecklists.map(c => ({
@@ -167,8 +162,6 @@ const Execution = () => {
       Date_Timestamp: now.toISOString()
     }));
 
-    localStorage.setItem('pcms_submitted_checklists', JSON.stringify([...submittedData, ...newRecords]));
-
     const supportItems = filteredChecklists.filter(c => statusUpdates[c.id] === 'Support Required');
     const newSupport = supportItems.map(c => ({
       id: `support-${Date.now()}-${c.id}`,
@@ -186,8 +179,6 @@ const Execution = () => {
       submittedById: user?.id || '',
       timestamp: now.toISOString()
     }));
-    if (newSupport.length > 0) localStorage.setItem('pcms_support_inbox', JSON.stringify([...supportInbox, ...newSupport]));
-
     const logs = JSON.parse(localStorage.getItem('pcms_logs') || '[]');
     logs.push({ id: Date.now(), user: user?.name, action: `Submitted ${newRecords.length} ${selectedFrequency} checklists`, timestamp: now.toISOString(), type: 'Execution' });
     localStorage.setItem('pcms_logs', JSON.stringify(logs));

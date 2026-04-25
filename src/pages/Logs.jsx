@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { FileClock, Search, List, ShieldCheck, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useData } from '../context/DataContext';
 
 const Logs = () => {
-  const [activeTab, setActiveTab] = useState('submissions');
+  const { submissions: cloudSubmissions, logs: cloudLogs } = useData();
   const [submissions, setSubmissions] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [activeTab, setActiveTab] = useState('submissions');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    setSubmissions(JSON.parse(localStorage.getItem('pcms_submitted_checklists') || '[]').reverse());
-    setAuditLogs(JSON.parse(localStorage.getItem('pcms_logs') || '[]').reverse());
-  }, []);
+    setSubmissions([...cloudSubmissions].reverse());
+    setAuditLogs([...cloudLogs].reverse());
+  }, [cloudSubmissions, cloudLogs]);
 
   const getFilteredSubmissions = () => {
     return submissions.filter(sub => {

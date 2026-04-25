@@ -2,27 +2,16 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Upload, AlertCircle, CheckCircle2, XCircle, Users, Download, List, Trash2, UserMinus, UserCheck, Shield, Key, RefreshCw, Save, Eye, EyeOff, Clock, ChevronDown, Settings } from 'lucide-react';
 import { parseCSV, validateEmployees } from '../utils/csvParser';
 import * as XLSX from 'xlsx';
+import { useData } from '../context/DataContext';
 
 const UploadEmployees = () => {
+  const { employees, shifts, activities, updateFirebase } = useData();
   const [activeTab, setActiveTab] = useState('upload');
-  const [employees, setEmployees] = useState([]);
   const [file, setFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [editingEmployee, setEditingEmployee] = useState(null);
-  const [activities, setActivities] = useState([]);
   
-  // Shift Master State
-  const [shiftMaster, setShiftMaster] = useState(() => {
-    const saved = localStorage.getItem('pcms_shift_master');
-    return saved ? JSON.parse(saved) : {
-      'A': { start: '06:00', end: '14:00' },
-      'B': { start: '14:00', end: '22:00' },
-      'C': { start: '22:00', end: '06:00' },
-      'G': { start: '09:00', end: '18:00' }
-    };
-  });
-
   // Login allocation tab state
   const [editingPasswords, setEditingPasswords] = useState({});
   const [showPasswords, setShowPasswords] = useState({});
@@ -42,19 +31,6 @@ const UploadEmployees = () => {
   });
   const fileInputRef = useRef(null);
 
-  useEffect(() => {
-    loadEmployees();
-    setActivities(JSON.parse(localStorage.getItem('pcms_activities') || '[]'));
-  }, [activeTab]);
-
-  useEffect(() => {
-    localStorage.setItem('pcms_shift_master', JSON.stringify(shiftMaster));
-  }, [shiftMaster]);
-
-  const loadEmployees = () => {
-    setEmployees(JSON.parse(localStorage.getItem('pcms_employees') || '[]'));
-  };
-
   const processFile = (selectedFile) => {
     if (!selectedFile) return;
     const isExcel = selectedFile.name.match(/\.(xlsx|xls|csv)$/i);
@@ -67,30 +43,28 @@ const UploadEmployees = () => {
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
         setValidationResult(validateEmployees(data));
-      } catch {
+      } catch (error) {
         setValidationResult({ parseErrors: ['Failed to parse file. Ensure it is correctly formatted.'] });
       }
     };
     reader.readAsBinaryString(selectedFile);
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!validationResult || validationResult.errors.length > 0) return;
     try {
-      const existing = JSON.parse(localStorage.getItem('pcms_employees') || '[]');
-      // Set default password = Employee_ID on upload
       const withDefaults = validationResult.validData.map(emp => ({
         ...emp,
         password: emp.password || emp.Employee_ID,
         Status: emp.Status || 'Active'
       }));
-      localStorage.setItem('pcms_employees', JSON.stringify([...existing, ...withDefaults]));
+      await updateFirebase('employees', [...employees, ...withDefaults]);
       setFile(null);
       setValidationResult(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       setActiveTab('view');
     } catch (e) {
-      setValidationResult({ parseErrors: ['Failed to save. File may be too large.'] });
+      alert('Upload failed: ' + e.message);
     }
   };
 
@@ -103,50 +77,39 @@ const UploadEmployees = () => {
     window.URL.revokeObjectURL(url);
   };
 
-  const toggleStatus = (id) => {
+  const toggleStatus = async (id) => {
     const updated = employees.map(emp =>
       emp.Employee_ID === id ? { ...emp, Status: emp.Status === 'Active' ? 'Inactive' : 'Active' } : emp
     );
-    setEmployees(updated);
-    localStorage.setItem('pcms_employees', JSON.stringify(updated));
+    await updateFirebase('employees', updated);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!window.confirm('Delete this employee?')) return;
     const updated = employees.filter(emp => emp.Employee_ID !== id);
-    setEmployees(updated);
-    localStorage.setItem('pcms_employees', JSON.stringify(updated));
+    await updateFirebase('employees', updated);
   };
 
-  const handleManualAdd = (e) => {
+  const handleManualAdd = async (e) => {
     e.preventDefault();
     if (!newEmployee.Employee_ID || !newEmployee.Employee_Name || !newEmployee.Department) {
       alert('Please fill in required fields: ID, Name, and Department.');
       return;
     }
     const emp = { ...newEmployee, password: newEmployee.Employee_ID };
-    const updated = [...employees, emp];
-    setEmployees(updated);
-    localStorage.setItem('pcms_employees', JSON.stringify(updated));
+    await updateFirebase('employees', [...employees, emp]);
     setIsManualModalOpen(false);
     setNewEmployee({
-      Employee_ID: '',
-      Employee_Name: '',
-      Designation: '',
-      Department: '',
-      Mobile_Number: '',
-      Shift: '',
-      Status: 'Active',
-      Allowed_Activity: []
+      Employee_ID: '', Employee_Name: '', Designation: '', Department: '',
+      Mobile_Number: '', Shift: '', Status: 'Active', Allowed_Activity: []
     });
   };
 
-  const handleSaveAllocation = () => {
+  const handleSaveAllocation = async () => {
     const updated = employees.map(emp =>
       emp.Employee_ID === editingEmployee.Employee_ID ? { ...editingEmployee } : emp
     );
-    setEmployees(updated);
-    localStorage.setItem('pcms_employees', JSON.stringify(updated));
+    await updateFirebase('employees', updated);
     setEditingEmployee(null);
   };
 
@@ -155,20 +118,23 @@ const UploadEmployees = () => {
     setEditingPasswords(prev => ({ ...prev, [empId]: value }));
   };
 
-  const handlePasswordSave = (emp) => {
+  const handlePasswordSave = async (emp) => {
     const newPwd = editingPasswords[emp.Employee_ID];
     if (!newPwd || !newPwd.trim()) return;
     const updated = employees.map(e =>
       e.Employee_ID === emp.Employee_ID ? { ...e, password: newPwd.trim() } : e
     );
-    setEmployees(updated);
-    localStorage.setItem('pcms_employees', JSON.stringify(updated));
-    setEditingPasswords(prev => { const n = { ...prev }; delete n[emp.Employee_ID]; return n; });
+    await updateFirebase('employees', updated);
+    setEditingPasswords(prev => {
+      const copy = { ...prev };
+      delete copy[emp.Employee_ID];
+      return copy;
+    });
     setSavedNotice(emp.Employee_ID);
     setTimeout(() => setSavedNotice(null), 2000);
   };
 
-  const handleResetPassword = (emp) => {
+  const handleResetPassword = async (emp) => {
     if (!window.confirm(`Reset password for ${emp.Employee_Name} to their Employee ID (${emp.Employee_ID})?`)) return;
     const updated = employees.map(e =>
       e.Employee_ID === emp.Employee_ID ? { ...e, password: emp.Employee_ID } : e

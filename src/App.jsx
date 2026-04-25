@@ -14,6 +14,7 @@ import ScanRedirect from './pages/ScanRedirect';
 import ScanLineSelect from './pages/ScanLineSelect';
 
 import Dashboard from './pages/Dashboard';
+import { DataProvider } from './context/DataContext';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
@@ -74,9 +75,11 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <AppRoutes />
-      </Router>
+      <DataProvider>
+        <Router>
+          <AppRoutes />
+        </Router>
+      </DataProvider>
     </AuthProvider>
   );
 }

@@ -2,10 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Upload, FileText, CheckCircle2, XCircle, ClipboardList, Download, List, Trash2, Power, PowerOff } from 'lucide-react';
 import { parseCSV, validateChecklist } from '../utils/csvParser';
 import * as XLSX from 'xlsx';
+import { useData } from '../context/DataContext';
 
 const UploadChecklist = () => {
+  const { checklists, updateFirebase } = useData();
   const [activeTab, setActiveTab] = useState('upload'); // 'upload', 'view'
-  const [checklists, setChecklists] = useState([]);
   const [file, setFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
@@ -24,22 +25,10 @@ const UploadChecklist = () => {
   });
   const fileInputRef = useRef(null);
 
-  useEffect(() => {
-    loadChecklists();
-  }, [activeTab]);
-
-  const loadChecklists = () => {
-    setChecklists(JSON.parse(localStorage.getItem('pcms_checklists') || '[]'));
-  };
-
   const processFile = (selectedFile) => {
     if (!selectedFile) return;
     const isExcel = selectedFile.name.match(/\.(xlsx|xls|csv)$/i);
-    if (!isExcel) {
-      alert('Please upload a valid Excel or CSV file.');
-      return;
-    }
-
+    if (!isExcel) { alert('Please upload a valid Excel or CSV file.'); return; }
     setFile(selectedFile);
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -48,7 +37,6 @@ const UploadChecklist = () => {
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         const data = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-        
         setValidationResult(validateChecklist(data));
       } catch (error) {
         setValidationResult({ parseErrors: ['Failed to parse Excel file. Ensure it is correctly formatted.'] });
@@ -57,18 +45,16 @@ const UploadChecklist = () => {
     reader.readAsBinaryString(selectedFile);
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!validationResult || validationResult.errors.length > 0) return;
     try {
-      const existing = JSON.parse(localStorage.getItem('pcms_checklists') || '[]');
-      localStorage.setItem('pcms_checklists', JSON.stringify([...existing, ...validationResult.validData]));
+      await updateFirebase('checklists', [...checklists, ...validationResult.validData]);
       setFile(null);
       setValidationResult(null);
       if(fileInputRef.current) fileInputRef.current.value = '';
       setActiveTab('view');
     } catch (e) {
-      console.error('Save failed', e);
-      setValidationResult({ parseErrors: ['Failed to save data. The file might be too large for local storage.'] });
+      alert('Upload failed: ' + e.message);
     }
   };
 
@@ -78,53 +64,40 @@ const UploadChecklist = () => {
     const blob = new Blob([headers + sample], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = 'Checklist_Master_Template.csv';
-    a.click();
+    a.href = url; a.download = 'Checklist_Master_Template.csv'; a.click();
     window.URL.revokeObjectURL(url);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this checklist item?')) {
       const updated = checklists.filter(chk => chk.id !== id);
-      setChecklists(updated);
-      localStorage.setItem('pcms_checklists', JSON.stringify(updated));
+      await updateFirebase('checklists', updated);
     }
   };
 
-  const toggleStatus = (id) => {
+  const toggleStatus = async (id) => {
     const updated = checklists.map(chk => {
       if (chk.id === id) {
         return { ...chk, Status: chk.Status === 'Active' ? 'Inactive' : 'Active' };
       }
       return chk;
     });
-    setChecklists(updated);
-    localStorage.setItem('pcms_checklists', JSON.stringify(updated));
+    await updateFirebase('checklists', updated);
   };
 
-  const handleManualAdd = (e) => {
+  const handleManualAdd = async (e) => {
     e.preventDefault();
     if (!newActivity.Type_of_Activity || !newActivity.Component || !newActivity.Activity_Description) {
       alert('Please fill in required fields: Activity Type, Component, and Description.');
       return;
     }
     const item = { ...newActivity, id: Date.now() };
-    const updated = [...checklists, item];
-    setChecklists(updated);
-    localStorage.setItem('pcms_checklists', JSON.stringify(updated));
+    await updateFirebase('checklists', [...checklists, item]);
     setIsManualModalOpen(false);
     setNewActivity({
-      Type_of_Activity: '',
-      Line_Equipment: '',
-      Sub_Line_Equipment: '',
-      Component: '',
-      Activity_Description: '',
-      Frequency: 'Daily',
-      Status: 'Active',
-      Document_Number: '',
-      Revision: '',
-      Last_Revised_Date: ''
+      Type_of_Activity: '', Line_Equipment: '', Sub_Line_Equipment: '', Component: '',
+      Activity_Description: '', Frequency: 'Daily', Status: 'Active',
+      Document_Number: '', Revision: '', Last_Revised_Date: ''
     });
   };
 

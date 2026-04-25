@@ -1,34 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { Inbox, Clock, CheckCircle, AlertTriangle, User, MessageSquare, Send, Shield } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Inbox, CheckCircle, AlertTriangle, Send, Shield } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 
 const SupportInbox = () => {
   const { user } = useAuth();
-  const [inbox, setInbox] = useState([]);
+  const { supportInbox, updateFirebase } = useData();
   const [adminReply, setAdminReply] = useState({});
   const [userReply, setUserReply] = useState({});
 
   const isAdmin = user?.role === 'UNIT_ADMIN' || user?.role === 'MASTER_ADMIN';
 
-  useEffect(() => {
-    loadInbox();
-  }, []);
-
-  const loadInbox = () => {
-    const loadedInbox = JSON.parse(localStorage.getItem('pcms_support_inbox') || '[]');
-    
-    // USERs only see their own requests
+  const inbox = useMemo(() => {
     if (!isAdmin) {
-      const myInbox = loadedInbox.filter(req => req.submittedById === user?.id);
-      setInbox(myInbox);
-    } else {
-      setInbox(loadedInbox);
+      return supportInbox.filter(req => req.submittedById === user?.id);
     }
-  };
+    return supportInbox;
+  }, [supportInbox, isAdmin, user]);
 
-  const handleResolve = (entryId) => {
-    const allInbox = JSON.parse(localStorage.getItem('pcms_support_inbox') || '[]');
-    const updated = allInbox.map(req => {
+  const handleResolve = async (entryId) => {
+    const updated = supportInbox.map(req => {
       if (req.id === entryId) {
         return {
           ...req,
@@ -39,14 +30,12 @@ const SupportInbox = () => {
       }
       return req;
     });
-    localStorage.setItem('pcms_support_inbox', JSON.stringify(updated));
-    loadInbox();
+    await updateFirebase('support_inbox', updated);
     setAdminReply(prev => ({ ...prev, [entryId]: '' }));
   };
 
-  const handleAdminJobAllocate = (entryId) => {
-    const allInbox = JSON.parse(localStorage.getItem('pcms_support_inbox') || '[]');
-    const updated = allInbox.map(req => {
+  const handleAdminJobAllocate = async (entryId) => {
+    const updated = supportInbox.map(req => {
       if (req.id === entryId) {
         return {
           ...req,
@@ -57,17 +46,15 @@ const SupportInbox = () => {
       }
       return req;
     });
-    localStorage.setItem('pcms_support_inbox', JSON.stringify(updated));
-    loadInbox();
+    await updateFirebase('support_inbox', updated);
     setAdminReply(prev => ({ ...prev, [entryId]: '' }));
   };
 
-  const handleUserUpdate = (entryId) => {
-    const allInbox = JSON.parse(localStorage.getItem('pcms_support_inbox') || '[]');
+  const handleUserUpdate = async (entryId) => {
     const reply = userReply[entryId];
     if (!reply || !reply.trim()) return;
 
-    const updated = allInbox.map(req => {
+    const updated = supportInbox.map(req => {
       if (req.id === entryId) {
         const updates = req.userUpdates || [];
         return {
@@ -81,8 +68,7 @@ const SupportInbox = () => {
       }
       return req;
     });
-    localStorage.setItem('pcms_support_inbox', JSON.stringify(updated));
-    loadInbox();
+    await updateFirebase('support_inbox', updated);
     setUserReply(prev => ({ ...prev, [entryId]: '' }));
   };
 

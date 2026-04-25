@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { QrCode, Lock, User, Leaf, Shield, Globe, ArrowRight, TreePine } from 'lucide-react';
+import { useData } from '../context/DataContext';
 
 const Login = () => {
+  const { employees: cloudEmployees, units: cloudUnits, updateFirebase } = useData();
   const [activePortal, setActivePortal] = useState('UNIT'); // 'UNIT' or 'MASTER'
   
   useEffect(() => {
@@ -12,6 +14,25 @@ const Login = () => {
       setActivePortal('MASTER');
     }
   }, []);
+
+  // Data Migration: LocalStorage -> Firebase (Only once if Firebase is empty)
+  useEffect(() => {
+    const migrate = async () => {
+      const localUnits = JSON.parse(localStorage.getItem('pcms_units') || '[]');
+      if (localUnits.length > 0 && cloudUnits.length === 0) {
+        await updateFirebase('units', localUnits);
+      }
+      const localEmps = JSON.parse(localStorage.getItem('pcms_employees') || '[]');
+      if (localEmps.length > 0 && cloudEmployees.length === 0) {
+        await updateFirebase('employees', localEmps);
+      }
+      const localChecklists = JSON.parse(localStorage.getItem('pcms_checklists') || '[]');
+      if (localChecklists.length > 0) {
+        await updateFirebase('checklists', localChecklists);
+      }
+    };
+    migrate();
+  }, [cloudUnits, cloudEmployees]);
 
   const [id, setId] = useState('');
   const [password, setPassword] = useState('');
@@ -44,8 +65,7 @@ const Login = () => {
       }
       actualUser = { id: 'Master_jarvis', name: 'Master Admin', role: 'MASTER_ADMIN', unit: null, allowedActivity: 'ALL' };
     } else if (role === 'USER') {
-      const employees = JSON.parse(localStorage.getItem('pcms_employees') || '[]');
-      const emp = employees.find(e => e.Employee_ID === id.trim());
+      const emp = cloudEmployees.find(e => e.Employee_ID === id.trim());
       
       if (!emp) {
         setError('User ID not found in Employee Master.');
@@ -69,8 +89,7 @@ const Login = () => {
         allowedActivity: emp.Allowed_Activity || 'ALL'
       };
     } else if (role === 'UNIT_ADMIN') {
-      const units = JSON.parse(localStorage.getItem('pcms_units') || '[]');
-      const unit = units.find(u => u.id === id.trim() || u.name === id.trim());
+      const unit = cloudUnits.find(u => u.id === id.trim() || u.name === id.trim());
       if (!unit) {
         setError('Unit ID/Name not found.');
         return;

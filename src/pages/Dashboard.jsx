@@ -11,10 +11,11 @@ import {
   PieChart, Pie, Cell, Line, ComposedChart
 } from 'recharts';
 
+import { useData } from '../context/DataContext';
+
 const Dashboard = () => {
   const { user } = useAuth();
-  const [rawData, setRawData] = useState([]);
-  const [supportData, setSupportData] = useState([]);
+  const { submissions: rawData, supportInbox: supportData } = useData();
   const [showFilters, setShowFilters] = useState(false);
   
   // Filter States
@@ -29,13 +30,6 @@ const Dashboard = () => {
     frequency: 'ALL',
     user: 'ALL'
   });
-
-  useEffect(() => {
-    const rawSubmissions = JSON.parse(localStorage.getItem('pcms_submitted_checklists') || '[]');
-    const rawSupport = JSON.parse(localStorage.getItem('pcms_support_inbox') || '[]');
-    setRawData(rawSubmissions);
-    setSupportData(rawSupport);
-  }, []);
 
   const COLORS = {
     Done: '#10B981',
