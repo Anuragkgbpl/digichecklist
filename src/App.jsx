@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/layout/Layout';
 import Login from './pages/Login';
@@ -18,9 +18,13 @@ import { DataProvider } from './context/DataContext';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
   
   if (loading) return <div>Loading...</div>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    const redirectPath = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?redirect=${redirectPath}`} replace />;
+  }
   if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/dashboard" replace />;
   
   return children;
@@ -33,9 +37,10 @@ function AppRoutes() {
       <Route path="/scan/:level/:name" element={<ScanRedirect />} />
       <Route path="/user/scan-select" element={<ScanLineSelect />} />
       
-      <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
+      {/* Routes with Layout */}
+      <Route path="/" element={<Layout />}>
+        <Route index element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} />
+        <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         
         {/* Master Admin Routes */}
         <Route path="master/units" element={
