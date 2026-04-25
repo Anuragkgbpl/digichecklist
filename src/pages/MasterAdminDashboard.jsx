@@ -33,7 +33,7 @@ const MasterAdminDashboard = () => {
     }
   }, [rawUnits, rawActivities]);
 
-  const handleSaveUnit = (e) => {
+  const handleSaveUnit = async (e) => {
     e.preventDefault();
     if (!newUnit.name || (!newUnit.password && !editingUnitId)) return alert('Name and Password are required');
     
