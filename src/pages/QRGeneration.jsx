@@ -110,22 +110,18 @@ const QRGeneration = () => {
       </p>
 
       <div className="card no-print-shadow">
-        {/* Level Tabs */}
+        {/* Level Tabs (Now just Activity Type) */}
         <div className="no-print" style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
-          {['Activity Type', 'Line', 'Sub-Line'].map(level => (
-            <div
-              key={level}
-              onClick={() => setSelectedLevel(level)}
-              style={{
-                padding: '0.75rem 1rem',
-                borderBottom: selectedLevel === level ? '2px solid var(--primary-light)' : 'none',
-                color: selectedLevel === level ? 'var(--primary-light)' : 'var(--text-secondary)',
-                fontWeight: selectedLevel === level ? 600 : 400,
-                cursor: 'pointer'
-              }}>
-              {level} Level
-            </div>
-          ))}
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              borderBottom: '2px solid var(--primary-light)',
+              color: 'var(--primary-light)',
+              fontWeight: 600,
+              cursor: 'default'
+            }}>
+            Activity Type Level
+          </div>
         </div>
 
         {/* Search Bar */}

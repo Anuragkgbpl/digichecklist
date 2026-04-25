@@ -56,9 +56,7 @@ function AppRoutes() {
         <Route path="user/execute" element={
           <ProtectedRoute allowedRoles={['USER', 'UNIT_ADMIN', 'MASTER_ADMIN']}><Execution /></ProtectedRoute>
         } />
-        <Route path="user/scan-select" element={
-          <ProtectedRoute allowedRoles={['USER', 'UNIT_ADMIN', 'MASTER_ADMIN']}><ScanLineSelect /></ProtectedRoute>
-        } />
+        <Route path="user/scan-select" element={<ScanLineSelect />} />
         <Route path="user/support-inbox" element={
           <ProtectedRoute allowedRoles={['USER', 'UNIT_ADMIN', 'MASTER_ADMIN']}><SupportInbox /></ProtectedRoute>
         } />

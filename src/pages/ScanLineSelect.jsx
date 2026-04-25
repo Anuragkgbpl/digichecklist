@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Layers, ChevronRight, ArrowLeft, CheckCircle, MapPin } from 'lucide-react';
+import { useData } from '../context/DataContext';
 
 const ScanLineSelect = () => {
   const { user } = useAuth();
+  const { checklists: cloudChecklists = [] } = useData();
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
@@ -17,29 +19,28 @@ const ScanLineSelect = () => {
   const [subLines, setSubLines] = useState([]);
 
   useEffect(() => {
-    const checklists = JSON.parse(localStorage.getItem('pcms_checklists') || '[]');
     let relevant = activityType
-      ? checklists.filter(c => c.Type_of_Activity === activityType)
-      : checklists;
+      ? cloudChecklists.filter(c => c.Type_of_Activity === activityType)
+      : cloudChecklists;
 
-    // Apply user activity filter
+    // Apply user activity filter if logged in
     if (user?.allowedActivity && user.allowedActivity !== 'ALL') {
-      relevant = relevant.filter(c => c.Type_of_Activity === user.allowedActivity);
+      const allowed = Array.isArray(user.allowedActivity) ? user.allowedActivity : [user.allowedActivity];
+      relevant = relevant.filter(c => allowed.includes(c.Type_of_Activity));
     }
 
     const uniqueLines = [...new Set(relevant.map(c => c.Line_Equipment).filter(Boolean))];
     setLines(uniqueLines);
 
-    if (preSelectedLine) {
-      const subs = [...new Set(relevant.filter(c => c.Line_Equipment === preSelectedLine).map(c => c.Sub_Line_Equipment).filter(Boolean))];
+    if (selectedLine) {
+      const subs = [...new Set(relevant.filter(c => c.Line_Equipment === selectedLine).map(c => c.Sub_Line_Equipment).filter(Boolean))];
       setSubLines(subs);
     }
-  }, [activityType, preSelectedLine, user]);
+  }, [activityType, selectedLine, user, cloudChecklists]);
 
   const handleLineSelect = (line) => {
     setSelectedLine(line);
-    const checklists = JSON.parse(localStorage.getItem('pcms_checklists') || '[]');
-    let relevant = activityType ? checklists.filter(c => c.Type_of_Activity === activityType) : checklists;
+    let relevant = activityType ? cloudChecklists.filter(c => c.Type_of_Activity === activityType) : cloudChecklists;
     const subs = [...new Set(relevant.filter(c => c.Line_Equipment === line).map(c => c.Sub_Line_Equipment).filter(Boolean))];
     setSubLines(subs);
     if (subs.length === 0) {

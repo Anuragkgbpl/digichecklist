@@ -1,11 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Upload, AlertCircle, CheckCircle2, XCircle, Users, Download, List, Trash2, UserMinus, UserCheck, Shield, Key, RefreshCw, Save, Eye, EyeOff, Clock, ChevronDown, Settings, Info } from 'lucide-react';
 import { parseCSV, validateEmployees } from '../utils/csvParser';
 import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
 
 const UploadEmployees = () => {
-  const { employees, shifts, checklists, updateFirebase } = useData();
+  const { employees = [], shifts: shiftMaster = {}, checklists = [], updateFirebase } = useData();
   const [activeTab, setActiveTab] = useState('upload');
   const [file, setFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -26,6 +26,7 @@ const UploadEmployees = () => {
 
   // Dynamically fetch unique activity types from Checklist Master
   const dynamicActivities = useMemo(() => {
+    if (!checklists) return [];
     return [...new Set(checklists.map(c => c.Type_of_Activity).filter(Boolean))];
   }, [checklists]);
 

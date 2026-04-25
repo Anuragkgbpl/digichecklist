@@ -10,12 +10,12 @@ const ScanRedirect = () => {
   useEffect(() => {
     if (loading) return;
 
-    if (!user) {
-      // Not logged in → go to login with redirect param
-      navigate(`/login?redirect=/scan/${encodeURIComponent(level)}/${encodeURIComponent(name)}`);
-    } else if (level === 'activitytype') {
-      // Activity Type scan → show Line/Sub-Line selector first
+    if (level === 'activitytype') {
+      // Activity Type scan → show Line/Sub-Line selector first (Allow anonymous)
       navigate(`/user/scan-select?activityType=${encodeURIComponent(name)}`);
+    } else if (!user) {
+      // Not logged in for Line/Sub-Line → go to login
+      navigate(`/login?redirect=/scan/${encodeURIComponent(level)}/${encodeURIComponent(name)}`);
     } else {
       // Line or Sub-Line scan → go directly to execution
       navigate(`/user/execute?scanLevel=${encodeURIComponent(level)}&scanName=${encodeURIComponent(name)}`);
