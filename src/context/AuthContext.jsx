@@ -7,11 +7,13 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check localStorage for mock session
+    // Check localStorage for mock session (Optional: Disabled to land on Login page as requested)
+    /*
     const storedUser = localStorage.getItem('pcms_auth_user');
     if (storedUser) {
       setUser(JSON.parse(storedUser));
     }
+    */
     setLoading(false);
   }, []);
 
