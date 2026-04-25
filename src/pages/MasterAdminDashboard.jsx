@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Shield, Settings, Save, RefreshCw } from 'lucide-react';
+import { Plus, Edit, Trash2, Shield, Settings, Save, RefreshCw, Building2 } from 'lucide-react';
+import { useData } from '../context/DataContext';
 
 const MasterAdminDashboard = () => {
+  const { units: rawUnits, activities: rawActivities, updateFirebase } = useData();
   const [units, setUnits] = useState([]);
   const [activityTypes, setActivityTypes] = useState([]);
   const [isAddingUnit, setIsAddingUnit] = useState(false);
@@ -11,20 +13,25 @@ const MasterAdminDashboard = () => {
   const [newActivityName, setNewActivityName] = useState('');
 
   useEffect(() => {
-    // Load from local storage
-    const savedUnits = JSON.parse(localStorage.getItem('pcms_units') || '[]');
-    setUnits(savedUnits.length > 0 ? savedUnits : [
-      { id: 'UNIT-001', name: 'Pune Manufacturing Facility', parentCompany: 'Acme Corp', state: 'Maharashtra', district: 'Pune' }
-    ]);
+    if (rawUnits && rawUnits.length > 0) {
+      setUnits(rawUnits);
+    } else {
+      setUnits([
+        { id: 'UNIT-001', name: 'Pune Manufacturing Facility', parentCompany: 'Acme Corp', state: 'Maharashtra', district: 'Pune' }
+      ]);
+    }
 
-    const savedActivities = JSON.parse(localStorage.getItem('pcms_activities') || '[]');
-    setActivityTypes(savedActivities.length > 0 ? savedActivities : [
-      { id: 'ACT-01', name: 'GMP', editable: false },
-      { id: 'ACT-02', name: 'Line Clearance', editable: false },
-      { id: 'ACT-03', name: 'Fire Safety', editable: false },
-      { id: 'ACT-04', name: 'Preventive Maintenance', editable: false }
-    ]);
-  }, []);
+    if (rawActivities && rawActivities.length > 0) {
+      setActivityTypes(rawActivities);
+    } else {
+      setActivityTypes([
+        { id: 'ACT-01', name: 'GMP', editable: false },
+        { id: 'ACT-02', name: 'Line Clearance', editable: false },
+        { id: 'ACT-03', name: 'Fire Safety', editable: false },
+        { id: 'ACT-04', name: 'Preventive Maintenance', editable: false }
+      ]);
+    }
+  }, [rawUnits, rawActivities]);
 
   const handleSaveUnit = (e) => {
     e.preventDefault();
@@ -41,8 +48,7 @@ const MasterAdminDashboard = () => {
       updatedUnits = [...units, unitToAdd];
     }
     
-    setUnits(updatedUnits);
-    localStorage.setItem('pcms_units', JSON.stringify(updatedUnits));
+    await updateFirebase('units', updatedUnits);
     setIsAddingUnit(false);
     setEditingUnitId(null);
     setNewUnit({ name: '', parentCompany: '', plantLocation: '', district: '', state: '', pincode: '', password: '' });
@@ -62,15 +68,14 @@ const MasterAdminDashboard = () => {
     setIsAddingUnit(true);
   };
 
-  const handleDeleteUnit = (id) => {
+  const handleDeleteUnit = async (id) => {
     if (window.confirm('Are you sure you want to delete this unit?')) {
       const updated = units.filter(u => u.id !== id);
-      setUnits(updated);
-      localStorage.setItem('pcms_units', JSON.stringify(updated));
+      await updateFirebase('units', updated);
     }
   };
 
-  const handleAddActivity = () => {
+  const handleAddActivity = async () => {
     if (!newActivityName.trim()) return;
     const newAct = {
       id: `ACT-${Math.floor(Math.random() * 1000)}`,
@@ -78,16 +83,14 @@ const MasterAdminDashboard = () => {
       editable: true
     };
     const updatedActivities = [...activityTypes, newAct];
-    setActivityTypes(updatedActivities);
-    localStorage.setItem('pcms_activities', JSON.stringify(updatedActivities));
+    await updateFirebase('activities', updatedActivities);
     setNewActivityName('');
     setIsAddingActivity(false);
   };
 
-  const handleDeleteActivity = (id) => {
+  const handleDeleteActivity = async (id) => {
     const updatedActivities = activityTypes.filter(a => a.id !== id);
-    setActivityTypes(updatedActivities);
-    localStorage.setItem('pcms_activities', JSON.stringify(updatedActivities));
+    await updateFirebase('activities', updatedActivities);
   };
 
   return (
