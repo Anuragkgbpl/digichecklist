@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
 
 const UploadEmployees = () => {
-  const { employees = [], shifts: shiftMaster = {}, checklists = [], updateFirebase } = useData();
+  const { employees = [], shifts: cloudShifts = {}, checklists = [], updateFirebase } = useData();
   const [activeTab, setActiveTab] = useState('upload');
   const [file, setFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -32,9 +32,9 @@ const UploadEmployees = () => {
 
   // Use shifts from useData or defaults
   const shiftMaster = useMemo(() => {
-    if (shifts && shifts.length > 0) {
+    if (cloudShifts && cloudShifts.length > 0) {
       const obj = {};
-      shifts.forEach(s => { if(s.id) obj[s.id] = s; });
+      cloudShifts.forEach(s => { if(s.id) obj[s.id] = s; });
       return obj;
     }
     return {
@@ -43,7 +43,7 @@ const UploadEmployees = () => {
       'C': { id: 'C', start: '22:00', end: '06:00' },
       'G': { id: 'G', start: '09:00', end: '18:00' }
     };
-  }, [shifts]);
+  }, [cloudShifts]);
 
   const processFile = (selectedFile) => {
     if (!selectedFile) return;
