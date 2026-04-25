@@ -84,6 +84,15 @@ const Execution = () => {
 
   const departments = useMemo(() => employees.length > 0 ? [...new Set(employees.map(e => e.Department).filter(Boolean))] : [], [employees]);
 
+  const activityType = useMemo(() => {
+    if (!user || user.allowedActivity === 'ALL') return null;
+    if (Array.isArray(user.allowedActivity)) {
+      if (user.allowedActivity.includes('ALL')) return null;
+      return user.allowedActivity.join(', ');
+    }
+    return user.allowedActivity;
+  }, [user]);
+
   useEffect(() => {
     if (dataLoading) return;
     if (!cloudChecklists) return;
