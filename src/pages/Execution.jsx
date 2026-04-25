@@ -51,7 +51,14 @@ const PhotoLightbox = ({ src, onClose }) => (
 
 const Execution = () => {
   const { user } = useAuth();
-  const { checklists: cloudChecklists, submissions: cloudSubmissions, supportInbox: cloudSupport, updateFirebase, employees } = useData();
+  const { 
+    checklists: cloudChecklists = [], 
+    submissions: cloudSubmissions = [], 
+    supportInbox: cloudSupport = [], 
+    logs: cloudLogs = [],
+    updateFirebase, 
+    employees = [] 
+  } = useData();
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
@@ -140,50 +147,72 @@ const Execution = () => {
     setIsSubmitting(true);
     const now = new Date();
 
-    const newRecords = filteredChecklists.map(c => ({
-      id: `${Date.now()}-${c.id}`,
-      Date: now.toISOString().split('T')[0],
-      Type_of_Activity: c.Type_of_Activity,
-      Line_Equipment: c.Line_Equipment,
-      Sub_Line_Equipment: c.Sub_Line_Equipment,
-      Component: c.Component,
-      Activity_Description: c.Activity_Description,
-      Frequency: c.Frequency,
-      Status: statusUpdates[c.id] || 'Pending',
-      Remark: remarks[c.id] || '',
-      Photo: photos[c.id] || null,
-      SupportDept: supportDetails[c.id]?.dept || '',
-      SupportAssignedTo: supportDetails[c.id]?.assignedTo || '',
-      Document_Number: c.Document_Number || '-',
-      Revision: c.Revision || '-',
-      Last_Revised_Date: c.Last_Revised_Date || '-',
-      Submitted_By: (user?.name || '') + ' (' + (user?.id || '') + ')',
-      Submitted_By_ID: user?.id || '',
-      Date_Timestamp: now.toISOString()
-    }));
+    try {
+      const newRecords = filteredChecklists.map(c => ({
+        id: `${Date.now()}-${c.id}`,
+        Date: now.toISOString().split('T')[0],
+        Type_of_Activity: c.Type_of_Activity,
+        Line_Equipment: c.Line_Equipment,
+        Sub_Line_Equipment: c.Sub_Line_Equipment,
+        Component: c.Component,
+        Activity_Description: c.Activity_Description,
+        Frequency: c.Frequency,
+        Status: statusUpdates[c.id] || 'Pending',
+        Remark: remarks[c.id] || '',
+        Photo: photos[c.id] || null,
+        SupportDept: supportDetails[c.id]?.dept || '',
+        SupportAssignedTo: supportDetails[c.id]?.assignedTo || '',
+        Document_Number: c.Document_Number || '-',
+        Revision: c.Revision || '-',
+        Last_Revised_Date: c.Last_Revised_Date || '-',
+        Submitted_By: (user?.name || '') + ' (' + (user?.id || '') + ')',
+        Submitted_By_ID: user?.id || '',
+        Date_Timestamp: now.toISOString()
+      }));
 
-    const supportItems = filteredChecklists.filter(c => statusUpdates[c.id] === 'Support Required');
-    const newSupport = supportItems.map(c => ({
-      id: `support-${Date.now()}-${c.id}`,
-      status: 'Open',
-      location: c.Line_Equipment || c.Sub_Line_Equipment || 'Unknown',
-      activity: c.Type_of_Activity,
-      taskId: c.id,
-      component: c.Component,
-      activityDescription: c.Activity_Description,
-      remark: remarks[c.id] || 'No remarks.',
-      photo: photos[c.id] || null,
-      department: supportDetails[c.id]?.dept || '',
-      assignedTo: supportDetails[c.id]?.assignedTo || '',
-      submittedBy: (user?.name || '') + ' (' + (user?.id || '') + ')',
-      submittedById: user?.id || '',
-      timestamp: now.toISOString()
-    }));
-    const logs = JSON.parse(localStorage.getItem('pcms_logs') || '[]');
-    logs.push({ id: Date.now(), user: user?.name, action: `Submitted ${newRecords.length} ${selectedFrequency} checklists`, timestamp: now.toISOString(), type: 'Execution' });
-    localStorage.setItem('pcms_logs', JSON.stringify(logs));
+      const supportItems = filteredChecklists.filter(c => statusUpdates[c.id] === 'Support Required');
+      const newSupport = supportItems.map(c => ({
+        id: `support-${Date.now()}-${c.id}`,
+        status: 'Open',
+        location: c.Line_Equipment || c.Sub_Line_Equipment || 'Unknown',
+        activity: c.Type_of_Activity,
+        taskId: c.id,
+        component: c.Component,
+        activityDescription: c.Activity_Description,
+        remark: remarks[c.id] || 'No remarks.',
+        photo: photos[c.id] || null,
+        department: supportDetails[c.id]?.dept || '',
+        assignedTo: supportDetails[c.id]?.assignedTo || '',
+        submittedBy: (user?.name || '') + ' (' + (user?.id || '') + ')',
+        submittedById: user?.id || '',
+        timestamp: now.toISOString()
+      }));
 
-    setTimeout(() => { setIsSubmitting(false); setSubmitSuccess(true); }, 800);
+      // Submit all to Firebase
+      if (newRecords.length > 0) {
+        await updateFirebase('submissions', [...cloudSubmissions, ...newRecords]);
+      }
+      if (newSupport.length > 0) {
+        await updateFirebase('support_inbox', [...cloudSupport, ...newSupport]);
+      }
+
+      // Log the action
+      const newLogs = [...(cloudLogs || []), {
+        id: Date.now(),
+        user: user?.name,
+        action: `Submitted ${newRecords.length} ${selectedFrequency} checklists`,
+        timestamp: now.toISOString(),
+        type: 'Execution'
+      }];
+      await updateFirebase('logs', newLogs);
+
+      setIsSubmitting(false);
+      setSubmitSuccess(true);
+    } catch (e) {
+      console.error('Submission failed', e);
+      alert('Error submitting checklist: ' + e.message);
+      setIsSubmitting(false);
+    }
   };
 
   const getStatusColor = (s) => ({ 'Pending': '#94A3B8', 'Done': '#10B981', 'WIP': '#F59E0B', 'Hold': '#64748B', 'Postponed': '#8B5CF6', 'Support Required': '#EF4444' }[s] || '#94A3B8');

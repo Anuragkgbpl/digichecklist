@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, AlertCircle, CheckCircle2, XCircle, Users, Download, List, Trash2, UserMinus, UserCheck, Shield, Key, RefreshCw, Save, Eye, EyeOff, Clock, ChevronDown, Settings } from 'lucide-react';
+import { Upload, AlertCircle, CheckCircle2, XCircle, Users, Download, List, Trash2, UserMinus, UserCheck, Shield, Key, RefreshCw, Save, Eye, EyeOff, Clock, ChevronDown, Settings, Info } from 'lucide-react';
 import { parseCSV, validateEmployees } from '../utils/csvParser';
 import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
 
 const UploadEmployees = () => {
-  const { employees, shifts, activities, updateFirebase } = useData();
+  const { employees, shifts, checklists, updateFirebase } = useData();
   const [activeTab, setActiveTab] = useState('upload');
   const [file, setFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -16,20 +16,33 @@ const UploadEmployees = () => {
   const [editingPasswords, setEditingPasswords] = useState({});
   const [showPasswords, setShowPasswords] = useState({});
   const [savedNotice, setSavedNotice] = useState(null);
-  const [selectedActivityTab, setSelectedActivityTab] = useState('All');
   const [activeDropdown, setActiveDropdown] = useState(null); // empId
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [newEmployee, setNewEmployee] = useState({
-    Employee_ID: '',
-    Employee_Name: '',
-    Designation: '',
-    Department: '',
-    Mobile_Number: '',
-    Shift: '',
-    Status: 'Active',
-    Allowed_Activity: []
+    Employee_ID: '', Employee_Name: '', Designation: '', Department: '',
+    Mobile_Number: '', Shift: '', Status: 'Active', Allowed_Activity: []
   });
   const fileInputRef = useRef(null);
+
+  // Dynamically fetch unique activity types from Checklist Master
+  const dynamicActivities = useMemo(() => {
+    return [...new Set(checklists.map(c => c.Type_of_Activity).filter(Boolean))];
+  }, [checklists]);
+
+  // Use shifts from useData or defaults
+  const shiftMaster = useMemo(() => {
+    if (shifts && shifts.length > 0) {
+      const obj = {};
+      shifts.forEach(s => { if(s.id) obj[s.id] = s; });
+      return obj;
+    }
+    return {
+      'A': { id: 'A', start: '06:00', end: '14:00' },
+      'B': { id: 'B', start: '14:00', end: '22:00' },
+      'C': { id: 'C', start: '22:00', end: '06:00' },
+      'G': { id: 'G', start: '09:00', end: '18:00' }
+    };
+  }, [shifts]);
 
   const processFile = (selectedFile) => {
     if (!selectedFile) return;
@@ -139,8 +152,7 @@ const UploadEmployees = () => {
     const updated = employees.map(e =>
       e.Employee_ID === emp.Employee_ID ? { ...e, password: emp.Employee_ID } : e
     );
-    setEmployees(updated);
-    localStorage.setItem('pcms_employees', JSON.stringify(updated));
+    await updateFirebase('employees', updated);
     setSavedNotice(emp.Employee_ID);
     setTimeout(() => setSavedNotice(null), 2000);
   };
@@ -149,11 +161,22 @@ const UploadEmployees = () => {
     setShowPasswords(prev => ({ ...prev, [empId]: !prev[empId] }));
   };
 
+  const handleUpdateShiftTiming = async (id, field, value) => {
+    const currentShifts = shifts.length > 0 ? shifts : [
+      { id: 'A', start: '06:00', end: '14:00' },
+      { id: 'B', start: '14:00', end: '22:00' },
+      { id: 'C', start: '22:00', end: '06:00' },
+      { id: 'G', start: '09:00', end: '18:00' }
+    ];
+    const updated = currentShifts.map(s => s.id === id ? { ...s, [field]: value } : s);
+    await updateFirebase('shifts', updated);
+  };
+
   const tabs = [
     { id: 'upload', icon: <Upload size={16} />, label: 'Upload Employees' },
     { id: 'view', icon: <List size={16} />, label: 'View Employees' },
     { id: 'login', icon: <Key size={16} />, label: 'Login Allocation' },
-    { id: 'shift', icon: <Clock size={16} />, label: 'Shift Allocation' },
+    { id: 'shift', icon: <Clock size={16} />, label: 'Shift Timings' },
   ];
 
   return (
@@ -249,7 +272,7 @@ const UploadEmployees = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
-                  {['ID', 'Name', 'Designation', 'Department', 'Mobile', 'Activity', 'Status', 'Actions'].map(h => (
+                  {['ID', 'Name', 'Designation', 'Department', 'Mobile', 'Status', 'Actions'].map(h => (
                     <th key={h} style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{h}</th>
                   ))}
                 </tr>
@@ -262,11 +285,6 @@ const UploadEmployees = () => {
                     <td style={{ padding: '0.75rem 1rem' }}>{emp.Designation}</td>
                     <td style={{ padding: '0.75rem 1rem' }}>{emp.Department}</td>
                     <td style={{ padding: '0.75rem 1rem' }}>{emp.Mobile_Number}</td>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <span style={{ fontSize: '0.75rem', backgroundColor: '#F1F5F9', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 600 }}>
-                        {emp.Allowed_Activity || 'Not Set'}
-                      </span>
-                    </td>
                     <td style={{ padding: '0.75rem 1rem' }}>
                       <span style={{ padding: '0.25rem 0.5rem', borderRadius: 'var(--border-radius-sm)', fontSize: '0.75rem', fontWeight: 600, backgroundColor: emp.Status === 'Active' ? '#ECFDF5' : '#FEF2F2', color: emp.Status === 'Active' ? 'var(--status-completed)' : 'var(--status-rejected)' }}>
                         {emp.Status || 'Active'}
@@ -304,11 +322,6 @@ const UploadEmployees = () => {
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
             <h3 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Key size={18} /> User Access Matrix</h3>
-            <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '0.2rem', borderRadius: '8px', overflowX: 'auto', maxWidth: '100%' }}>
-              {['All', ...new Set(activities.map(a => a.name))].map(tab => (
-                <div key={tab} onClick={() => setSelectedActivityTab(tab)} style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', fontWeight: 600, borderRadius: '6px', cursor: 'pointer', backgroundColor: selectedActivityTab === tab ? '#FFF' : 'transparent', color: selectedActivityTab === tab ? 'var(--primary-light)' : 'var(--text-secondary)', boxShadow: selectedActivityTab === tab ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', whiteSpace: 'nowrap' }}>{tab}</div>
-              ))}
-            </div>
           </div>
 
           <div style={{ overflowX: 'auto' }}>
@@ -323,7 +336,7 @@ const UploadEmployees = () => {
                 </tr>
               </thead>
               <tbody>
-                {employees.filter(e => selectedActivityTab === 'All' || (Array.isArray(e.Allowed_Activity) ? e.Allowed_Activity.includes(selectedActivityTab) : e.Allowed_Activity === selectedActivityTab)).map((emp) => (
+                {employees.map((emp) => (
                   <tr key={emp.Employee_ID} style={{ borderBottom: '1px solid var(--border-color)' }}>
                     <td style={{ padding: '0.75rem 1rem' }}>
                       <div style={{ fontWeight: 600 }}>{emp.Employee_Name}</div>
@@ -364,28 +377,27 @@ const UploadEmployees = () => {
                             />
                             <span style={{ fontWeight: 600, color: 'var(--primary-dark)' }}>ALL</span>
                           </label>
-                          {activities.map(act => (
-                            <label key={act.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.3rem 0.4rem', borderRadius: '4px', cursor: 'pointer' }}>
+                          {dynamicActivities.map(actName => (
+                            <label key={actName} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.3rem 0.4rem', borderRadius: '4px', cursor: 'pointer' }}>
                               <input 
                                 type="checkbox" 
                                 disabled={emp.Allowed_Activity?.includes('ALL')}
-                                checked={emp.Allowed_Activity?.includes(act.name)} 
-                                onChange={(e) => {
+                                checked={emp.Allowed_Activity?.includes(actName)} 
+                                onChange={async (e) => {
                                   const current = Array.isArray(emp.Allowed_Activity) ? emp.Allowed_Activity : [];
-                                  const next = e.target.checked ? [...current, act.name] : current.filter(x => x !== act.name);
+                                  const next = e.target.checked ? [...current, actName] : current.filter(x => x !== actName);
                                   const updated = employees.map(x => x.Employee_ID === emp.Employee_ID ? { ...x, Allowed_Activity: next } : x);
-                                  setEmployees(updated);
-                                  localStorage.setItem('pcms_employees', JSON.stringify(updated));
+                                  await updateFirebase('employees', updated);
                                 }} 
                               />
-                              <span>{act.name}</span>
+                              <span>{actName}</span>
                             </label>
                           ))}
                         </div>
                       )}
                     </td>
                     <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                      <button className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem' }} onClick={() => { if(window.confirm(`Reset password for ${emp.Employee_Name}?`)) { const updated = employees.map(x => x.Employee_ID === emp.Employee_ID ? {...x, password: emp.Employee_ID} : x); setEmployees(updated); localStorage.setItem('pcms_employees', JSON.stringify(updated)); alert('Password reset to Employee ID'); } }}><RefreshCw size={14} /></button>
+                      <button className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem' }} onClick={() => handleResetPassword(emp)}><RefreshCw size={14} /></button>
                     </td>
                   </tr>
                 ))}
@@ -400,65 +412,42 @@ const UploadEmployees = () => {
         <div className="card">
           <div style={{ marginBottom: '2rem' }}>
             <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Settings size={18} /> Configure Shift Master Timings</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
               {Object.keys(shiftMaster).map(s => (
-                <div key={s} style={{ padding: '1rem', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                  <div style={{ fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
-                    Shift {s} <Clock size={14} />
+                <div key={s} style={{ padding: '1.5rem', backgroundColor: '#F8FAFC', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                  <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--primary-dark)', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    Shift {s} <Clock size={18} />
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <input 
-                      type="time" value={shiftMaster[s].start} 
-                      onChange={e => setShiftMaster({...shiftMaster, [s]: {...shiftMaster[s], start: e.target.value}})}
-                      style={{ padding: '0.3rem', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '0.8rem', width: '100%' }}
-                    />
-                    <span>-</span>
-                    <input 
-                      type="time" value={shiftMaster[s].end} 
-                      onChange={e => setShiftMaster({...shiftMaster, [s]: {...shiftMaster[s], end: e.target.value}})}
-                      style={{ padding: '0.3rem', border: '1px solid #CBD5E1', borderRadius: '4px', fontSize: '0.8rem', width: '100%' }}
-                    />
+                  <div style={{ display: 'grid', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase' }}>Start Time</label>
+                      <input 
+                        type="time" value={shiftMaster[s].start} 
+                        onChange={e => handleUpdateShiftTiming(s, 'start', e.target.value)}
+                        style={{ width: '100%', padding: '0.5rem', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.9rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase' }}>End Time</label>
+                      <input 
+                        type="time" value={shiftMaster[s].end} 
+                        onChange={e => handleUpdateShiftTiming(s, 'end', e.target.value)}
+                        style={{ width: '100%', padding: '0.5rem', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.9rem' }}
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
-              <thead style={{ backgroundColor: '#F8FAFC', color: 'var(--text-secondary)', borderBottom: '2px solid var(--border-color)' }}>
-                <tr>
-                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Employee</th>
-                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Department</th>
-                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Shift Name</th>
-                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Operational Timings</th>
-                </tr>
-              </thead>
-              <tbody>
-                {employees.map((emp) => (
-                  <tr key={emp.Employee_ID} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                    <td style={{ padding: '0.75rem 1rem' }}><div style={{ fontWeight: 600 }}>{emp.Employee_Name}</div><div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{emp.Employee_ID}</div></td>
-                    <td style={{ padding: '0.75rem 1rem' }}>{emp.Department}</td>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <select value={emp.Shift || ''} onChange={(e) => { const val = e.target.value; const updated = employees.map(x => x.Employee_ID === emp.Employee_ID ? { ...x, Shift: val } : x); setEmployees(updated); localStorage.setItem('pcms_employees', JSON.stringify(updated)); }} style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid var(--border-color)', width: '150px' }}>
-                        <option value="">No Shift</option>
-                        <option value="A">Shift A</option>
-                        <option value="B">Shift B</option>
-                        <option value="C">Shift C</option>
-                        <option value="G">Shift G</option>
-                      </select>
-                    </td>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      {emp.Shift && shiftMaster[emp.Shift] ? (
-                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600, backgroundColor: '#F1F5F9', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
-                          {shiftMaster[emp.Shift].start} - {shiftMaster[emp.Shift].end}
-                        </span>
-                      ) : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          
+          <div style={{ marginTop: '2rem', padding: '1.5rem', backgroundColor: '#F0F9FF', borderRadius: '12px', border: '1px solid #BAE6FD', color: '#0369A1' }}>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <Info size={20} />
+              <div style={{ fontSize: '0.875rem' }}>
+                <strong>Note:</strong> Shift assignments are made during Employee Upload or via the "Edit Allocation" tool in the View Employees tab.
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -486,19 +475,19 @@ const UploadEmployees = () => {
                     <span style={{ fontWeight: 600, color: 'var(--primary-dark)' }}>ALL (Unrestricted)</span>
                   </label>
                   
-                  {activities.map(act => (
-                    <label key={act.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.25rem 0.5rem', cursor: 'pointer' }}>
+                  {dynamicActivities.map(actName => (
+                    <label key={actName} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.25rem 0.5rem', cursor: 'pointer' }}>
                       <input 
                         type="checkbox" 
                         disabled={editingEmployee.Allowed_Activity?.includes('ALL')}
-                        checked={editingEmployee.Allowed_Activity?.includes(act.name)} 
+                        checked={editingEmployee.Allowed_Activity?.includes(actName)} 
                         onChange={(e) => {
                           const current = editingEmployee.Allowed_Activity || [];
-                          const next = e.target.checked ? [...current, act.name] : current.filter(x => x !== act.name);
+                          const next = e.target.checked ? [...current, actName] : current.filter(x => x !== actName);
                           setEditingEmployee({ ...editingEmployee, Allowed_Activity: next });
                         }} 
                       />
-                      <span style={{ fontSize: '0.875rem' }}>{act.name}</span>
+                      <span style={{ fontSize: '0.875rem' }}>{actName}</span>
                     </label>
                   ))}
                 </div>

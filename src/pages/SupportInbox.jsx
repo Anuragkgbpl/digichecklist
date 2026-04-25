@@ -5,7 +5,7 @@ import { useData } from '../context/DataContext';
 
 const SupportInbox = () => {
   const { user } = useAuth();
-  const { supportInbox, updateFirebase } = useData();
+  const { supportInbox = [], updateFirebase } = useData();
   const [adminReply, setAdminReply] = useState({});
   const [userReply, setUserReply] = useState({});
 

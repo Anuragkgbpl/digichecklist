@@ -3,9 +3,11 @@ import { QrCode, Printer, Search, Building, AlertCircle, Download } from 'lucide
 import { useAuth } from '../context/AuthContext';
 import { QRCode } from 'react-qr-code';
 
+import { useData } from '../context/DataContext';
+
 const QRGeneration = () => {
   const { user } = useAuth();
-  const [checklists, setChecklists] = useState([]);
+  const { checklists } = useData();
   const [hierarchyData, setHierarchyData] = useState({
     types: [],
     lines: [],
@@ -16,26 +18,17 @@ const QRGeneration = () => {
 
   const getScanUrl = (name) => {
     if (!name || String(name).trim() === '') return null;
-    const levelSlug = selectedLevel.replace(/\s+/g, '').toLowerCase();
+    const levelSlug = selectedLevel.replace(/\s+/g, '').replace(/-/g, '').toLowerCase();
     return `${window.location.origin}/scan/${levelSlug}/${encodeURIComponent(String(name))}`;
   };
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('pcms_checklists');
-      const data = raw ? JSON.parse(raw) : [];
-      const arr = Array.isArray(data) ? data : [];
-      setChecklists(arr);
+    const types = [...new Set(checklists.map(c => c.Type_of_Activity).filter(v => v && String(v).trim()))];
+    const lines = [...new Set(checklists.map(c => c.Line_Equipment).filter(v => v && String(v).trim()))];
+    const subLines = [...new Set(checklists.map(c => c.Sub_Line_Equipment).filter(v => v && String(v).trim()))];
 
-      const types = [...new Set(arr.map(c => c.Type_of_Activity).filter(v => v && String(v).trim()))];
-      const lines = [...new Set(arr.map(c => c.Line_Equipment).filter(v => v && String(v).trim()))];
-      const subLines = [...new Set(arr.map(c => c.Sub_Line_Equipment).filter(v => v && String(v).trim()))];
-
-      setHierarchyData({ types, lines, subLines });
-    } catch (e) {
-      console.error('Error loading checklists:', e);
-    }
-  }, []);
+    setHierarchyData({ types, lines, subLines });
+  }, [checklists]);
 
   const getFilteredItems = () => {
     let items = [];
@@ -117,18 +110,22 @@ const QRGeneration = () => {
       </p>
 
       <div className="card no-print-shadow">
-        {/* Level Tabs (Now just Activity Type) */}
+        {/* Level Tabs */}
         <div className="no-print" style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
-          <div
-            style={{
-              padding: '0.75rem 1rem',
-              borderBottom: '2px solid var(--primary-light)',
-              color: 'var(--primary-light)',
-              fontWeight: 600,
-              cursor: 'default'
-            }}>
-            Activity Type Level
-          </div>
+          {['Activity Type', 'Line', 'Sub-Line'].map(level => (
+            <div
+              key={level}
+              onClick={() => setSelectedLevel(level)}
+              style={{
+                padding: '0.75rem 1rem',
+                borderBottom: selectedLevel === level ? '2px solid var(--primary-light)' : 'none',
+                color: selectedLevel === level ? 'var(--primary-light)' : 'var(--text-secondary)',
+                fontWeight: selectedLevel === level ? 600 : 400,
+                cursor: 'pointer'
+              }}>
+              {level} Level
+            </div>
+          ))}
         </div>
 
         {/* Search Bar */}
