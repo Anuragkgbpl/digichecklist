@@ -31,6 +31,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/scan/:level/:name" element={<ScanRedirect />} />
+      <Route path="/user/scan-select" element={<ScanLineSelect />} />
       
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
@@ -56,7 +57,6 @@ function AppRoutes() {
         <Route path="user/execute" element={
           <ProtectedRoute allowedRoles={['USER', 'UNIT_ADMIN', 'MASTER_ADMIN']}><Execution /></ProtectedRoute>
         } />
-        <Route path="user/scan-select" element={<ScanLineSelect />} />
         <Route path="user/support-inbox" element={
           <ProtectedRoute allowedRoles={['USER', 'UNIT_ADMIN', 'MASTER_ADMIN']}><SupportInbox /></ProtectedRoute>
         } />
