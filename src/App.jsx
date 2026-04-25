@@ -37,7 +37,7 @@ function AppRoutes() {
       <Route path="/scan/:level/:name" element={<ScanRedirect />} />
       <Route path="/user/scan-select" element={<ScanLineSelect />} />
       
-      {/* Routes with Layout */}
+      {/* All Application Routes wrapped in Layout */}
       <Route path="/" element={<Layout />}>
         <Route index element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} />
         <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
