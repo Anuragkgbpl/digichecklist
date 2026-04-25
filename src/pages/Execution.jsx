@@ -57,7 +57,8 @@ const Execution = () => {
     supportInbox: cloudSupport = [], 
     logs: cloudLogs = [],
     updateFirebase, 
-    employees = [] 
+    employees = [],
+    loading: dataLoading
   } = useData();
   const location = useLocation();
   const navigate = useNavigate();
@@ -74,38 +75,51 @@ const Execution = () => {
   const [photos, setPhotos] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [lightboxPhoto, setLightboxPhoto] = useState(null);
   const photoInputRefs = useRef({});
 
   const isAllActivities = useMemo(() => {
     return user?.allowedActivity === 'ALL' || (Array.isArray(user?.allowedActivity) && user.allowedActivity.includes('ALL'));
   }, [user]);
 
-  const departments = useMemo(() => [...new Set(employees.map(e => e.Department).filter(Boolean))], [employees]);
-
-  const activityType = useMemo(() => {
-    if (!user || user.allowedActivity === 'ALL') return null;
-    if (Array.isArray(user.allowedActivity)) {
-      if (user.allowedActivity.includes('ALL')) return null;
-      return user.allowedActivity.join(', ');
-    }
-    return user.allowedActivity;
-  }, [user]);
+  const departments = useMemo(() => employees.length > 0 ? [...new Set(employees.map(e => e.Department).filter(Boolean))] : [], [employees]);
 
   useEffect(() => {
+    if (dataLoading) return;
+    if (!cloudChecklists) return;
     let accessible = cloudChecklists;
     
+    // 1. Role-based filtering
     if (user?.role === 'USER' && !isAllActivities) {
-      const allowed = Array.isArray(user.allowedActivity) ? user.allowedActivity : [user.allowedActivity || ''];
-      accessible = cloudChecklists.filter(c => allowed.includes(c.Type_of_Activity));
+      const allowed = Array.isArray(user.allowedActivity) 
+        ? user.allowedActivity.map(a => String(a || '').trim().toLowerCase()) 
+        : [String(user.allowedActivity || '').trim().toLowerCase()];
+      accessible = cloudChecklists.filter(c => 
+        allowed.includes(String(c.Type_of_Activity || '').trim().toLowerCase())
+      );
     }
 
+    // 2. Scan-level filtering
     if (scanLevel && scanName) {
-      if (scanLevel === 'activitytype') accessible = accessible.filter(c => c.Type_of_Activity === scanName);
-      else if (scanLevel === 'line') accessible = accessible.filter(c => c.Line_Equipment === scanName);
-      else if (scanLevel === 'sub-line') accessible = accessible.filter(c => c.Sub_Line_Equipment === scanName);
+      const target = String(scanName).trim().toLowerCase();
+      if (scanLevel === 'activitytype') {
+        accessible = accessible.filter(c => String(c.Type_of_Activity || '').trim().toLowerCase() === target);
+      } else if (scanLevel === 'line') {
+        accessible = accessible.filter(c => String(c.Line_Equipment || '').trim().toLowerCase() === target);
+      } else if (scanLevel === 'sub-line') {
+        accessible = accessible.filter(c => String(c.Sub_Line_Equipment || '').trim().toLowerCase() === target);
+      }
     }
     setChecklists(accessible);
-  }, [user, scanLevel, scanName, isAllActivities, cloudChecklists]);
+
+    // Smart default frequency: if no daily, pick first available
+    if (accessible.length > 0) {
+      const availableFreqs = [...new Set(accessible.map(c => c.Frequency).filter(Boolean))];
+      if (availableFreqs.length > 0 && !availableFreqs.includes(selectedFrequency)) {
+        setSelectedFrequency(availableFreqs[0]);
+      }
+    }
+  }, [user, scanLevel, scanName, isAllActivities, cloudChecklists, dataLoading]);
 
   useEffect(() => {
     const filtered = checklists.filter(c => c.Frequency === selectedFrequency);
@@ -241,8 +255,18 @@ const Execution = () => {
     };
   }, [scanLevel, scanName, navigate]);
 
+  if (dataLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', backgroundColor: 'var(--bg-color)' }}>
+        <div style={{ width: '40px', height: '40px', border: '3px solid #E2E8F0', borderTop: '3px solid var(--primary-light)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Syncing checklists from cloud...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
   return (
-    <div>
+    <div className="container" style={{ paddingBottom: '5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <h2 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}><PlayCircle /> Checklist Execution</h2>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
