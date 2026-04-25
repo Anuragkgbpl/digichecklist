@@ -76,6 +76,7 @@ const Execution = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [lightboxPhoto, setLightboxPhoto] = useState(null);
+  const [isScanning, setIsScanning] = useState(false);
   const photoInputRefs = useRef({});
 
   const isAllActivities = useMemo(() => {
