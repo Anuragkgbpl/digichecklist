@@ -6,7 +6,7 @@ import { useData } from '../context/DataContext';
 
 const ScanLineSelect = () => {
   const { user } = useAuth();
-  const { checklists: cloudChecklists = [] } = useData();
+  const { checklists: cloudChecklists = [], loading: dataLoading } = useData();
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
@@ -19,14 +19,20 @@ const ScanLineSelect = () => {
   const [subLines, setSubLines] = useState([]);
 
   useEffect(() => {
+    if (dataLoading) return;
+
     let relevant = activityType
-      ? cloudChecklists.filter(c => c.Type_of_Activity === activityType)
+      ? cloudChecklists.filter(c => 
+          String(c.Type_of_Activity || '').trim().toLowerCase() === String(activityType).trim().toLowerCase()
+        )
       : cloudChecklists;
 
     // Apply user activity filter if logged in
     if (user?.allowedActivity && user.allowedActivity !== 'ALL') {
-      const allowed = Array.isArray(user.allowedActivity) ? user.allowedActivity : [user.allowedActivity];
-      relevant = relevant.filter(c => allowed.includes(c.Type_of_Activity));
+      const allowed = Array.isArray(user.allowedActivity) 
+        ? user.allowedActivity.map(a => String(a).toLowerCase()) 
+        : [String(user.allowedActivity).toLowerCase()];
+      relevant = relevant.filter(c => allowed.includes(String(c.Type_of_Activity).toLowerCase()));
     }
 
     const uniqueLines = [...new Set(relevant.map(c => c.Line_Equipment).filter(Boolean))];
@@ -36,7 +42,7 @@ const ScanLineSelect = () => {
       const subs = [...new Set(relevant.filter(c => c.Line_Equipment === selectedLine).map(c => c.Sub_Line_Equipment).filter(Boolean))];
       setSubLines(subs);
     }
-  }, [activityType, selectedLine, user, cloudChecklists]);
+  }, [activityType, selectedLine, user, cloudChecklists, dataLoading]);
 
   const handleLineSelect = (line) => {
     setSelectedLine(line);
@@ -71,6 +77,16 @@ const ScanLineSelect = () => {
     gap: '1rem',
     transition: 'all 0.15s ease',
   });
+
+  if (dataLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', backgroundColor: 'var(--bg-color)' }}>
+        <div style={{ width: '40px', height: '40px', border: '3px solid #E2E8F0', borderTop: '3px solid var(--primary-light)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Syncing with cloud...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-color)', padding: '1rem' }}>
