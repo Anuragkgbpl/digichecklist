@@ -17,42 +17,42 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     // 1. Sync Employees
     const unsubEmployees = syncData('employees', (val) => {
-      setEmployees(val ? Object.values(val) : []);
+      setEmployees(val ? Object.values(val).filter(Boolean) : []);
     });
 
     // 2. Sync Checklists
     const unsubChecklists = syncData('checklists', (val) => {
-      setChecklists(val ? Object.values(val) : []);
+      setChecklists(val ? Object.values(val).filter(Boolean) : []);
     });
 
     // 3. Sync Units
     const unsubUnits = syncData('units', (val) => {
-      setUnits(val ? Object.values(val) : []);
+      setUnits(val ? Object.values(val).filter(Boolean) : []);
     });
 
     // 4. Sync Submissions
     const unsubSubmissions = syncData('submissions', (val) => {
-      setSubmissions(val ? Object.values(val) : []);
+      setSubmissions(val ? Object.values(val).filter(Boolean) : []);
     });
 
     // 5. Sync Support Inbox
     const unsubSupport = syncData('support_inbox', (val) => {
-      setSupportInbox(val ? Object.values(val) : []);
+      setSupportInbox(val ? Object.values(val).filter(Boolean) : []);
     });
 
     // 6. Sync Logs
     const unsubLogs = syncData('logs', (val) => {
-      setLogs(val ? Object.values(val) : []);
+      setLogs(val ? Object.values(val).filter(Boolean) : []);
     });
 
     // 7. Sync Activities
     const unsubActivities = syncData('activities', (val) => {
-      setActivities(val ? Object.values(val) : []);
+      setActivities(val ? Object.values(val).filter(Boolean) : []);
     });
 
     // 8. Sync Shifts
     const unsubShifts = syncData('shifts', (val) => {
-      setShifts(val ? Object.values(val) : []);
+      setShifts(val ? Object.values(val).filter(Boolean) : []);
     });
 
     setLoading(false);

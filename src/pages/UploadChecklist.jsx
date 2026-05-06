@@ -1,13 +1,44 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Upload, FileText, CheckCircle2, XCircle, ClipboardList, Download, List, Trash2, Power, PowerOff } from 'lucide-react';
+import React, { useState, useRef, useMemo } from 'react';
+import { Upload, FileText, CheckCircle2, XCircle, ClipboardList, Download, List, Trash2, Power, PowerOff, Search, X, Filter } from 'lucide-react';
 import { parseCSV, validateChecklist } from '../utils/csvParser';
 import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
 
 const UploadChecklist = () => {
   const { checklists, updateFirebase } = useData();
-  const [activeTab, setActiveTab] = useState('upload'); // 'upload', 'view'
+  const [activeTab, setActiveTab] = useState('upload');
   const [file, setFile] = useState(null);
+
+  // Filter state
+  const [filterText, setFilterText] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterLine, setFilterLine] = useState('');
+  const [filterSubLine, setFilterSubLine] = useState('');
+  const [filterComponent, setFilterComponent] = useState('');
+  const [filterFrequency, setFilterFrequency] = useState('');
+
+  const activityTypes = useMemo(() => [...new Set(checklists.map(c => c.Type_of_Activity).filter(Boolean))], [checklists]);
+  const lines = useMemo(() => [...new Set(checklists.map(c => c.Line_Equipment).filter(Boolean))], [checklists]);
+  const subLines = useMemo(() => [...new Set(checklists.filter(c => !filterLine || c.Line_Equipment === filterLine).map(c => c.Sub_Line_Equipment).filter(Boolean))], [checklists, filterLine]);
+  const components = useMemo(() => [...new Set(checklists.map(c => c.Component).filter(Boolean))], [checklists]);
+  const frequencies = useMemo(() => [...new Set(checklists.map(c => c.Frequency).filter(Boolean))], [checklists]);
+
+  const filteredChecklists = useMemo(() => checklists.filter(c => {
+    const txt = filterText.toLowerCase();
+    const matchText = !txt ||
+      String(c.Activity_Description || '').toLowerCase().includes(txt) ||
+      String(c.Document_Number || '').toLowerCase().includes(txt) ||
+      String(c.Revision || '').toLowerCase().includes(txt);
+    return matchText
+      && (!filterType || c.Type_of_Activity === filterType)
+      && (!filterLine || c.Line_Equipment === filterLine)
+      && (!filterSubLine || c.Sub_Line_Equipment === filterSubLine)
+      && (!filterComponent || c.Component === filterComponent)
+      && (!filterFrequency || c.Frequency === filterFrequency);
+  }), [checklists, filterText, filterType, filterLine, filterSubLine, filterComponent, filterFrequency]);
+
+  const hasActiveFilters = filterText || filterType || filterLine || filterSubLine || filterComponent || filterFrequency;
+  const resetFilters = () => { setFilterText(''); setFilterType(''); setFilterLine(''); setFilterSubLine(''); setFilterComponent(''); setFilterFrequency(''); };
   const [isDragging, setIsDragging] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -184,6 +215,64 @@ const UploadChecklist = () => {
 
       {activeTab === 'view' && (
         <div className="card">
+          {/* Filter Bar */}
+          <div style={{ marginBottom: '1.5rem', backgroundColor: '#F8FAFC', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                <Filter size={18} /> Filter Results
+              </div>
+              {hasActiveFilters && (
+                <button onClick={resetFilters} style={{ background: 'none', border: 'none', color: 'var(--status-rejected)', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <X size={14} /> Reset All Filters
+                </button>
+              )}
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem' }}>
+              {/* Search Bar */}
+              <div style={{ position: 'relative' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+                <input 
+                  type="text" 
+                  value={filterText} 
+                  onChange={e => setFilterText(e.target.value)} 
+                  placeholder="Search Desc / Doc / Rev..." 
+                  style={{ width: '100%', padding: '0.5rem 0.75rem 0.5rem 2.25rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }} 
+                />
+              </div>
+
+              {/* Type Filter */}
+              <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }}>
+                <option value="">All Activity Types</option>
+                {activityTypes.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+
+              {/* Line Filter */}
+              <select value={filterLine} onChange={e => { setFilterLine(e.target.value); setFilterSubLine(''); }} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }}>
+                <option value="">All Lines</option>
+                {lines.map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
+
+              {/* Sub-Line Filter */}
+              <select value={filterSubLine} onChange={e => setFilterSubLine(e.target.value)} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }}>
+                <option value="">All Sub-Lines</option>
+                {subLines.map(sl => <option key={sl} value={sl}>{sl}</option>)}
+              </select>
+
+              {/* Component Filter */}
+              <select value={filterComponent} onChange={e => setFilterComponent(e.target.value)} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }}>
+                <option value="">All Components</option>
+                {components.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+
+              {/* Frequency Filter */}
+              <select value={filterFrequency} onChange={e => setFilterFrequency(e.target.value)} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }}>
+                <option value="">All Frequencies</option>
+                {frequencies.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+          </div>
+
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
               <thead>
@@ -202,7 +291,7 @@ const UploadChecklist = () => {
                 </tr>
               </thead>
               <tbody>
-                {checklists.map((chk, i) => (
+                {filteredChecklists.map((chk, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
                     <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{chk.Type_of_Activity}</td>
                     <td style={{ padding: '0.75rem 1rem' }}>{chk.Line_Equipment}</td>
@@ -245,10 +334,10 @@ const UploadChecklist = () => {
                     </td>
                   </tr>
                 ))}
-                {checklists.length === 0 && (
+                {filteredChecklists.length === 0 && (
                   <tr>
                     <td colSpan="11" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-                      No checklists found. Please upload a CSV or Excel file.
+                      {hasActiveFilters ? 'No activities match your current filters.' : 'No checklists found. Please upload a CSV or Excel file.'}
                     </td>
                   </tr>
                 )}

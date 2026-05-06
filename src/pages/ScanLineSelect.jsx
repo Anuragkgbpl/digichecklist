@@ -13,7 +13,7 @@ const ScanLineSelect = () => {
   const activityType = queryParams.get('activityType') || '';
   const preSelectedLine = queryParams.get('line') || '';
 
-  const [step, setStep] = useState(preSelectedLine ? 2 : 1); // 1 = pick line, 2 = pick sub-line
+  const [step, setStep] = useState(preSelectedLine ? 2 : 1); // 1=Line, 2=Sub-Line
   const [selectedLine, setSelectedLine] = useState(preSelectedLine);
   const [lines, setLines] = useState([]);
   const [subLines, setSubLines] = useState([]);
@@ -21,48 +21,74 @@ const ScanLineSelect = () => {
   useEffect(() => {
     if (dataLoading) return;
 
-    let relevant = activityType
-      ? cloudChecklists.filter(c => 
-          String(c.Type_of_Activity || '').trim().toLowerCase() === String(activityType).trim().toLowerCase()
-        )
-      : cloudChecklists;
+    // Helper to check if a user has access to a specific activity type
+    const hasAccess = (actType) => {
+      const allowed = user?.allowedActivity;
+      if (!allowed) return true; // No restriction
+      // Handle string 'ALL'
+      if (typeof allowed === 'string') {
+        return allowed === 'ALL' || String(allowed).trim().toLowerCase() === String(actType).trim().toLowerCase();
+      }
+      // Handle array
+      if (Array.isArray(allowed)) {
+        return allowed.includes('ALL') || allowed.some(a => String(a).trim().toLowerCase() === String(actType).trim().toLowerCase());
+      }
+      return true;
+    };
 
-    // Apply user activity filter if logged in
-    if (user?.allowedActivity && user.allowedActivity !== 'ALL') {
-      const allowed = Array.isArray(user.allowedActivity) 
-        ? user.allowedActivity.map(a => String(a).toLowerCase()) 
-        : [String(user.allowedActivity).toLowerCase()];
-      relevant = relevant.filter(c => allowed.includes(String(c.Type_of_Activity).toLowerCase()));
+    let relevant = cloudChecklists.filter(c => c.Status !== 'Inactive');
+
+    // Filter by scanned activity type first
+    if (activityType) {
+      relevant = relevant.filter(c =>
+        String(c.Type_of_Activity || '').trim().toLowerCase() === String(activityType).trim().toLowerCase()
+      );
+    }
+
+    // Apply user access control
+    relevant = relevant.filter(c => hasAccess(c.Type_of_Activity));
+
+    // Filter by previous selections
+    if (selectedLine) {
+      relevant = relevant.filter(c => c.Line_Equipment === selectedLine);
     }
 
     const uniqueLines = [...new Set(relevant.map(c => c.Line_Equipment).filter(Boolean))];
-    setLines(uniqueLines);
+    const uniqueSubs = [...new Set(relevant.map(c => c.Sub_Line_Equipment).filter(Boolean))];
 
-    if (selectedLine) {
-      const subs = [...new Set(relevant.filter(c => c.Line_Equipment === selectedLine).map(c => c.Sub_Line_Equipment).filter(Boolean))];
-      setSubLines(subs);
-    }
+    setLines(uniqueLines);
+    setSubLines(uniqueSubs);
   }, [activityType, selectedLine, user, cloudChecklists, dataLoading]);
 
   const handleLineSelect = (line) => {
     setSelectedLine(line);
-    let relevant = activityType ? cloudChecklists.filter(c => c.Type_of_Activity === activityType) : cloudChecklists;
-    const subs = [...new Set(relevant.filter(c => c.Line_Equipment === line).map(c => c.Sub_Line_Equipment).filter(Boolean))];
-    setSubLines(subs);
+    const relevant = (activityType ? cloudChecklists.filter(c => c.Type_of_Activity === activityType) : cloudChecklists)
+                    .filter(c => c.Line_Equipment === line);
+    const subs = [...new Set(relevant.map(c => c.Sub_Line_Equipment).filter(Boolean))];
     if (subs.length === 0) {
-      // No sub-lines — go directly to execution
-      navigate(`/user/execute?scanLevel=line&scanName=${encodeURIComponent(line)}`);
+      // Navigate directly if no sublines
+      const params = new URLSearchParams();
+      if (activityType) params.set('activityType', activityType);
+      params.set('line', line);
+      navigate(`/user/execute?${params.toString()}`);
     } else {
       setStep(2);
     }
   };
 
   const handleSubLineSelect = (subLine) => {
-    navigate(`/user/execute?scanLevel=sub-line&scanName=${encodeURIComponent(subLine)}`);
+    const params = new URLSearchParams();
+    if (activityType) params.set('activityType', activityType);
+    if (selectedLine) params.set('line', selectedLine);
+    params.set('subLine', subLine);
+    navigate(`/user/execute?${params.toString()}`);
   };
 
   const handleSkipSubLine = () => {
-    navigate(`/user/execute?scanLevel=line&scanName=${encodeURIComponent(selectedLine)}`);
+    const params = new URLSearchParams();
+    if (activityType) params.set('activityType', activityType);
+    if (selectedLine) params.set('line', selectedLine);
+    navigate(`/user/execute?${params.toString()}`);
   };
 
   const cardStyle = (selected = false) => ({
@@ -92,32 +118,20 @@ const ScanLineSelect = () => {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-color)', padding: '1rem' }}>
       <div style={{ width: '100%', maxWidth: '500px' }}>
 
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#EFF6FF', border: '2px solid var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
-            <Layers size={26} color="var(--primary-light)" />
-          </div>
-          <h2 style={{ margin: '0 0 0.5rem', color: 'var(--text-primary)' }}>
-            {step === 1 ? 'Select Line' : 'Select Sub-Line'}
-          </h2>
-          {activityType && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#EFF6FF', border: '1px solid #93C5FD', borderRadius: '999px', padding: '0.3rem 0.75rem', fontSize: '0.8rem', color: 'var(--primary-dark)', fontWeight: 600 }}>
-              Activity: {activityType}
-            </div>
-          )}
-        </div>
+        {/* Header handled by Layout */}
+
 
         {/* Stepper */}
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-          {['Select Line', 'Select Sub-Line', 'Execute'].map((label, i) => (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem', maxWidth: '300px', margin: '0 auto 2rem' }}>
+          {['Line', 'Sub-Line'].map((label, i) => (
             <React.Fragment key={label}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem', backgroundColor: step > i + 1 ? '#10B981' : step === i + 1 ? 'var(--primary-light)' : '#E2E8F0', color: step >= i + 1 ? '#fff' : 'var(--text-tertiary)' }}>
-                  {step > i + 1 ? <CheckCircle size={16} /> : i + 1}
+                <div style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.75rem', backgroundColor: step > i + 1 ? '#10B981' : step === i + 1 ? 'var(--primary-light)' : '#E2E8F0', color: step >= i + 1 ? '#fff' : 'var(--text-tertiary)' }}>
+                  {step > i + 1 ? <CheckCircle size={14} /> : i + 1}
                 </div>
-                <span style={{ fontSize: '0.7rem', marginTop: '0.3rem', color: step === i + 1 ? 'var(--primary-light)' : 'var(--text-tertiary)', fontWeight: step === i + 1 ? 600 : 400 }}>{label}</span>
+                <span style={{ fontSize: '0.65rem', marginTop: '0.3rem', color: step === i + 1 ? 'var(--primary-light)' : 'var(--text-tertiary)', fontWeight: step === i + 1 ? 600 : 400 }}>{label}</span>
               </div>
-              {i < 2 && <div style={{ flex: 2, height: '2px', backgroundColor: step > i + 1 ? '#10B981' : '#E2E8F0', margin: '0 0.25rem', marginBottom: '1.25rem' }} />}
+              {i < 1 && <div style={{ flex: 1.5, height: '2px', backgroundColor: step > i + 1 ? '#10B981' : '#E2E8F0', margin: '0 0.2rem', marginBottom: '1rem' }} />}
             </React.Fragment>
           ))}
         </div>
@@ -165,7 +179,7 @@ const ScanLineSelect = () => {
               <span style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>/ {selectedLine}</span>
             </div>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
-              Select a sub-line or load all checklists for <strong>{selectedLine}</strong>:
+              Select a sub-line for <strong>{selectedLine}</strong>:
             </p>
             <div style={{ display: 'grid', gap: '0.75rem' }}>
               {subLines.map(sub => (
@@ -186,7 +200,7 @@ const ScanLineSelect = () => {
                 </div>
               ))}
               <button onClick={handleSkipSubLine} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', padding: '0.75rem', marginTop: '0.25rem' }}>
-                Load All Checklists for {selectedLine}
+                Skip Sub-Line (Load All)
               </button>
             </div>
           </div>
@@ -197,3 +211,4 @@ const ScanLineSelect = () => {
 };
 
 export default ScanLineSelect;
+

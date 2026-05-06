@@ -12,15 +12,16 @@ import SupportInbox from './pages/SupportInbox';
 import Logs from './pages/Logs';
 import ScanRedirect from './pages/ScanRedirect';
 import ScanLineSelect from './pages/ScanLineSelect';
-
+import QRScanLanding from './pages/QRScanLanding';
 import Dashboard from './pages/Dashboard';
 import { DataProvider } from './context/DataContext';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
   
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>;
   if (!user) {
     const redirectPath = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?redirect=${redirectPath}`} replace />;
@@ -33,11 +34,15 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 function AppRoutes() {
   return (
     <Routes>
+      {/* ── PUBLIC ROUTES (No login needed) ── */}
       <Route path="/login" element={<Login />} />
       <Route path="/scan/:level/:name" element={<ScanRedirect />} />
-      <Route path="/user/scan-select" element={<ScanLineSelect />} />
-      
-      {/* All Application Routes wrapped in Layout */}
+      <Route path="/scan-landing/:level/:name" element={<QRScanLanding />} />
+
+      {/* QR Scan flow - fully public, no login required */}
+
+
+      {/* ── PROTECTED ROUTES (Login required) ── */}
       <Route path="/" element={<Layout />}>
         <Route index element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} />
         <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -58,13 +63,14 @@ function AppRoutes() {
           <ProtectedRoute allowedRoles={['UNIT_ADMIN', 'MASTER_ADMIN']}><QRGeneration /></ProtectedRoute>
         } />
         
-        {/* User / Employee Routes */}
-        <Route path="user/execute" element={
-          <ProtectedRoute allowedRoles={['USER', 'UNIT_ADMIN', 'MASTER_ADMIN']}><Execution /></ProtectedRoute>
-        } />
+        {/* Support Inbox - protected */}
         <Route path="user/support-inbox" element={
           <ProtectedRoute allowedRoles={['USER', 'UNIT_ADMIN', 'MASTER_ADMIN']}><SupportInbox /></ProtectedRoute>
         } />
+        
+        {/* QR Scan flow - inside layout */}
+        <Route path="user/scan-select" element={<ScanLineSelect />} />
+        <Route path="user/execute" element={<Execution />} />
         
         {/* Common Routes */}
         <Route path="logs" element={
@@ -77,13 +83,15 @@ function AppRoutes() {
 
 function App() {
   return (
-    <AuthProvider>
-      <DataProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
-      </DataProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <DataProvider>
+          <Router>
+            <AppRoutes />
+          </Router>
+        </DataProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

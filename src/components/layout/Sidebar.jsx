@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { LayoutDashboard, Users, ClipboardList, QrCode, PlayCircle, Inbox, FileClock, Building2, LogOut, Leaf } from 'lucide-react';
 
-const Sidebar = ({ isOpen, setIsOpen }) => {
+const Sidebar = ({ isOpen, setIsOpen, currentUnit }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -22,9 +22,15 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
   return (
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
-      <div className="sidebar-header" style={{ paddingBottom: '1rem' }}>
-        <Leaf size={24} color="#10B981" style={{ marginRight: '0.75rem' }} />
-        <h2>Digital PCMS</h2>
+      <div className="sidebar-header" style={{ paddingBottom: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          {currentUnit && currentUnit.logo ? (
+            <img src={currentUnit.logo} alt="Logo" style={{ height: '32px', marginRight: '0.75rem', objectFit: 'contain' }} />
+          ) : (
+            <Leaf size={24} color={currentUnit?.themeColor || "#10B981"} style={{ marginRight: '0.75rem' }} />
+          )}
+          <h2>{currentUnit ? currentUnit.name : 'Master Console'}</h2>
+        </div>
         <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--status-completed)' }}></div>
           {user.role.replace('_', ' ')} {user.unit && `• ${user.unit}`}
@@ -77,10 +83,12 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             <div style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginTop: '1rem' }}>
               Checklist Operations
             </div>
-            <NavLink to="/user/execute" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={closeSidebar}>
-              <PlayCircle size={20} />
-              <span>Execute Checklist</span>
-            </NavLink>
+            {user.role === 'USER' && (
+              <NavLink to="/user/execute" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={closeSidebar}>
+                <PlayCircle size={20} />
+                <span>Execute Checklist</span>
+              </NavLink>
+            )}
             <NavLink to="/user/support-inbox" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={closeSidebar}>
               <Inbox size={20} />
               <span>Support Inbox</span>

@@ -9,7 +9,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // Check localStorage for mock session (Optional: Disabled to land on Login page as requested)
     /*
-    const storedUser = localStorage.getItem('pcms_auth_user');
+    const storedUser = localStorage.getItem('_auth_user');
     if (storedUser) {
       setUser(JSON.parse(storedUser));
     }
@@ -25,6 +25,12 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
+    if (id !== 'qr_user') {
+      localStorage.removeItem('qr_mode');
+      localStorage.removeItem('qr_scan_level');
+      localStorage.removeItem('qr_scan_name');
+    }
+
     const mockUser = actualUser || {
       id,
       name: role === 'MASTER_ADMIN' ? 'Master Admin' : role === 'UNIT_ADMIN' ? 'Unit Admin' : 'Employee User',
@@ -32,15 +38,18 @@ export const AuthProvider = ({ children }) => {
       unit: role === 'MASTER_ADMIN' ? null : 'Unit A',
       allowedActivity: 'ALL'
     };
-    
+
     setUser(mockUser);
-    localStorage.setItem('pcms_auth_user', JSON.stringify(mockUser));
+    localStorage.setItem('_auth_user', JSON.stringify(mockUser));
     return true;
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('pcms_auth_user');
+    localStorage.removeItem('_auth_user');
+    localStorage.removeItem('qr_mode');
+    localStorage.removeItem('qr_scan_level');
+    localStorage.removeItem('qr_scan_name');
   };
 
   // Allows a USER to change their own password.
@@ -50,14 +59,14 @@ export const AuthProvider = ({ children }) => {
     if (!user || user.role !== 'USER') return false;
 
     // Update the employee record in localStorage
-    const employees = JSON.parse(localStorage.getItem('pcms_employees') || '[]');
+    const employees = JSON.parse(localStorage.getItem('_employees') || '[]');
     const updatedEmployees = employees.map(emp => {
       if (emp.Employee_ID === user.id) {
         return { ...emp, password: newPassword };
       }
       return emp;
     });
-    localStorage.setItem('pcms_employees', JSON.stringify(updatedEmployees));
+    localStorage.setItem('_employees', JSON.stringify(updatedEmployees));
 
     // Session doesn't store password, so nothing extra needed for session
     return true;
@@ -65,14 +74,14 @@ export const AuthProvider = ({ children }) => {
 
   // Unit Admin resets an employee's password to their Employee_ID
   const resetEmployeePassword = (employeeId) => {
-    const employees = JSON.parse(localStorage.getItem('pcms_employees') || '[]');
+    const employees = JSON.parse(localStorage.getItem('_employees') || '[]');
     const updatedEmployees = employees.map(emp => {
       if (emp.Employee_ID === employeeId) {
         return { ...emp, password: emp.Employee_ID };
       }
       return emp;
     });
-    localStorage.setItem('pcms_employees', JSON.stringify(updatedEmployees));
+    localStorage.setItem('_employees', JSON.stringify(updatedEmployees));
     return true;
   };
 

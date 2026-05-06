@@ -1,112 +1,121 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { QrCode, Lock, User, Leaf, Shield, Globe, ArrowRight, TreePine } from 'lucide-react';
+import { QrCode, Lock, User, Leaf, Shield, ArrowRight, TreePine } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Login = () => {
   const { employees: cloudEmployees, units: cloudUnits, updateFirebase } = useData();
-  const [activePortal, setActivePortal] = useState('UNIT'); // 'UNIT' or 'MASTER'
-  
-  useEffect(() => {
-    // Automatically switch to Master Portal if the URL hostname contains 'master'
-    if (window.location.hostname.includes('master')) {
-      setActivePortal('MASTER');
-    }
-  }, []);
 
-  // Data Migration: LocalStorage -> Firebase (Only once if Firebase is empty)
-  useEffect(() => {
-    const migrate = async () => {
-      const localUnits = JSON.parse(localStorage.getItem('pcms_units') || '[]');
-      if (localUnits.length > 0 && cloudUnits.length === 0) {
-        await updateFirebase('units', localUnits);
-      }
-      const localEmps = JSON.parse(localStorage.getItem('pcms_employees') || '[]');
-      if (localEmps.length > 0 && cloudEmployees.length === 0) {
-        await updateFirebase('employees', localEmps);
-      }
-      const localChecklists = JSON.parse(localStorage.getItem('pcms_checklists') || '[]');
-      if (localChecklists.length > 0) {
-        await updateFirebase('checklists', localChecklists);
-      }
-    };
-    migrate();
-  }, [cloudUnits, cloudEmployees]);
 
   const [id, setId] = useState('');
   const [password, setPassword] = useState('');
-  const [loginType, setLoginType] = useState('USER'); // 'USER', 'UNIT_ADMIN'
   const { login } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState('');
+  const [unitBranding, setUnitBranding] = useState(null);
+
+  useEffect(() => {
+    const inputId = id.trim();
+    if (inputId) {
+      const unit = cloudUnits.find(u => u.id === inputId || u.name === inputId || u.unitLoginId === inputId);
+      if (unit) {
+        setUnitBranding({
+          logo: unit.logo,
+          scale: unit.logoScale || 1,
+          border: unit.logoBorder || false,
+          color: unit.themeColor || '#10B981'
+        });
+      } else {
+        setUnitBranding(null);
+      }
+    } else {
+      setUnitBranding(null);
+    }
+  }, [id, cloudUnits]);
 
   const handleLogin = (e) => {
     e.preventDefault();
     setError('');
-    
+
     if (!id || !password) {
       setError('Please enter ID and Password');
       return;
     }
-    
-    let actualUser = null;
-    const role = activePortal === 'MASTER' ? 'MASTER_ADMIN' : loginType;
 
-    // Direct check for Master Admin for absolute reliability
-    if (role === 'MASTER_ADMIN') {
-      const inputId = id.trim();
-      const inputPass = password.trim();
-      
-      // Case-insensitive ID check for Master Admin
-      if (inputId.toLowerCase() !== 'master_jarvis' || inputPass !== '9826731251@Anurag') {
-        setError('Invalid Master Admin credentials. Please check ID and Password.');
-        return;
-      }
-      actualUser = { id: 'Master_jarvis', name: 'Master Admin', role: 'MASTER_ADMIN', unit: null, allowedActivity: 'ALL' };
-    } else if (role === 'USER') {
-      const emp = cloudEmployees.find(e => e.Employee_ID === id.trim());
-      
-      if (!emp) {
-        setError('User ID not found in Employee Master.');
-        return;
-      }
-      if (emp.Status === 'Inactive') {
-        setError('This account is marked as Inactive.');
-        return;
-      }
-      const storedPassword = emp.password || emp.Employee_ID;
-      if (storedPassword !== password.trim()) {
+    const inputId = id.trim();
+    const inputPass = password.trim();
+
+    let actualUser = null;
+    let role = null;
+
+    // 1. Check Master Admin First
+    if (inputId.toLowerCase() === 'master_jarvis') {
+      if (inputPass !== '9826731251@Anurag') {
         setError('Incorrect password.');
         return;
       }
-      
-      actualUser = {
-        id: emp.Employee_ID,
-        name: emp.Employee_Name,
-        role: 'USER',
-        unit: 'Unit A',
-        allowedActivity: emp.Allowed_Activity || 'ALL'
-      };
-    } else if (role === 'UNIT_ADMIN') {
-      const unit = cloudUnits.find(u => u.id === id.trim() || u.name === id.trim());
-      if (!unit) {
-        setError('Unit ID/Name not found.');
-        return;
-      }
-      if (unit.password && unit.password !== password.trim()) {
-        setError('Incorrect Unit Admin password.');
-        return;
-      }
-      actualUser = { id: unit.id, name: unit.name, role: 'UNIT_ADMIN', unit: unit.name, allowedActivity: 'ALL' };
+      role = 'MASTER_ADMIN';
+      actualUser = { id: 'Master_jarvis', name: 'Master Admin', role: 'MASTER_ADMIN', unit: null, allowedActivity: 'ALL' };
     }
-    
-    const success = login(id.trim(), password.trim(), role, actualUser);
-    
+    // 2. Check Unit Admin Second
+    else {
+      // Attempt to find unit in cloud data; fallback to localStorage if cloud data is empty
+      let unit = cloudUnits.find(u => u.id === inputId || u.name === inputId);
+      if (!unit && cloudUnits.length === 0) {
+        const localUnits = JSON.parse(localStorage.getItem('_units') || '[]');
+        unit = localUnits.find(u => u.id === inputId || u.name === inputId);
+      }
+      if (unit) {
+        if (unit.password && unit.password !== inputPass) {
+          setError('Incorrect password.');
+          return;
+        }
+        role = 'UNIT_ADMIN';
+        actualUser = { id: unit.id, name: unit.name, role: 'UNIT_ADMIN', unit: unit.name, allowedActivity: 'ALL' };
+      } else {
+        // Attempt to find employee in cloud data; fallback to localStorage if cloud data is empty
+        let emp = cloudEmployees.find(e => e.Employee_ID === inputId);
+        if (!emp && cloudEmployees.length === 0) {
+          const localEmps = JSON.parse(localStorage.getItem('_employees') || '[]');
+          emp = localEmps.find(e => e.Employee_ID === inputId);
+        }
+        if (emp) {
+          if (emp.Status === 'Inactive') {
+            setError('This account is marked as Inactive.');
+            return;
+          }
+          const storedPassword = emp.password || emp.Employee_ID;
+          if (storedPassword !== inputPass) {
+            setError('Incorrect password.');
+            return;
+          }
+          role = 'USER';
+          actualUser = {
+            id: emp.Employee_ID,
+            name: emp.Employee_Name,
+            role: 'USER',
+            unit: 'Unit A', // Default or derived from unit configuration in the future
+            allowedActivity: emp.Allowed_Activity || 'ALL'
+          };
+        } else {
+          setError('Invalid ID. User not found in system.');
+          return;
+        }
+      }
+    }
+
+    const success = login(inputId, inputPass, role, actualUser);
+
     if (!success) {
       setError('Login failed. Please try again.');
       return;
     }
+
+    // Clear any previous QR session data when logging in via main login page
+    localStorage.removeItem('qr_mode');
+    localStorage.removeItem('qr_scan_level');
+    localStorage.removeItem('qr_scan_name');
 
     const params = new URLSearchParams(window.location.search);
     const redirectUrl = params.get('redirect');
@@ -177,13 +186,6 @@ const Login = () => {
           .login-right {
             padding: 2.5rem 2rem;
           }
-        }
-        .portal-tab {
-          padding: 0.75rem 0;
-          cursor: pointer;
-          font-weight: 700;
-          font-size: 0.9rem;
-          transition: all 0.2s;
         }
         .input-group {
           margin-bottom: 1.25rem;
@@ -262,10 +264,10 @@ const Login = () => {
         <div className="login-left">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
             <div style={{ backgroundColor: '#10B981', padding: '0.6rem', borderRadius: '0.875rem' }}><Leaf color="#FFF" size={28} /></div>
-            <span style={{ fontWeight: 800, color: '#065F46', fontSize: '1.25rem' }}>Digital PCMS</span>
+            <span style={{ fontWeight: 800, color: '#065F46', fontSize: '1.25rem' }}>Digital checklist</span>
           </div>
           <h2 style={{ fontSize: '2.75rem', fontWeight: 900, lineHeight: 1.1, color: '#065F46', marginBottom: '1.5rem' }}>
-            Digitizing for a <br/><span style={{ color: '#10B981' }}>Greener Future.</span>
+            Digitizing for a <br /><span style={{ color: '#10B981' }}>Greener Future.</span>
           </h2>
           <p style={{ color: '#374151', fontSize: '1.1rem', lineHeight: 1.6, marginBottom: '2.5rem' }}>
             Eliminate paperwork with our state-of-the-art compliance system. Precision, speed, and sustainability combined.
@@ -278,65 +280,51 @@ const Login = () => {
         </div>
 
         {/* Right Side: Login Form */}
-        <div className="login-right">
-          <div className="mobile-header">
-            <div style={{ backgroundColor: '#10B981', padding: '0.6rem', borderRadius: '0.875rem', width: 'fit-content', margin: '0 auto 1rem auto' }}><Leaf color="#FFF" size={24} /></div>
-            <h2 style={{ color: '#065F46', margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Digital PCMS</h2>
-          </div>
+        <div className="login-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
 
-          {/* Portal Switcher */}
-          <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '2.5rem', borderBottom: '2px solid #F1F5F9' }}>
-            <div 
-              onClick={() => { setActivePortal('UNIT'); setLoginType('USER'); }}
-              className="portal-tab"
-              style={{ color: activePortal === 'UNIT' ? '#059669' : '#94A3B8', borderBottom: activePortal === 'UNIT' ? '2px solid #059669' : 'none', marginBottom: '-2px' }}
-            >
-              Unit Portal
+          {unitBranding && unitBranding.logo ? (
+            <div style={{
+              marginBottom: '2rem',
+              transform: `scale(${unitBranding.scale})`,
+              transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}>
+              <img
+                src={unitBranding.logo}
+                alt="Unit Logo"
+                style={{
+                  height: '80px',
+                  maxWidth: '200px',
+                  objectFit: 'contain',
+                  borderRadius: '12px',
+                  padding: unitBranding.border ? '8px' : '0',
+                  border: unitBranding.border ? `2px solid ${unitBranding.color}` : 'none',
+                  backgroundColor: unitBranding.border ? '#fff' : 'transparent',
+                  boxShadow: unitBranding.border ? '0 10px 15px -3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              />
             </div>
-            <div 
-              onClick={() => setActivePortal('MASTER')}
-              className="portal-tab"
-              style={{ color: activePortal === 'MASTER' ? '#059669' : '#94A3B8', borderBottom: activePortal === 'MASTER' ? '2px solid #059669' : 'none', marginBottom: '-2px' }}
-            >
-              Master Admin
-            </div>
-          </div>
-
-          <div style={{ marginBottom: '2rem' }}>
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.75rem', fontWeight: 800, color: '#1F2937' }}>Welcome</h3>
-            <p style={{ margin: 0, color: '#6B7280', fontSize: '0.9rem' }}>
-              {activePortal === 'MASTER' ? 'Global Administration Console' : 'Secure Unit Login'}
-            </p>
-          </div>
-
-          {activePortal === 'UNIT' && (
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', backgroundColor: '#F8FAFC', padding: '0.3rem', borderRadius: '0.875rem' }}>
-              {['USER', 'UNIT_ADMIN'].map((type) => (
-                <div 
-                  key={type}
-                  onClick={() => setLoginType(type)}
-                  style={{
-                    flex: 1, textAlign: 'center', padding: '0.6rem', fontSize: '0.8rem', fontWeight: 700, borderRadius: '0.6rem', cursor: 'pointer',
-                    backgroundColor: loginType === type ? '#FFF' : 'transparent',
-                    color: loginType === type ? '#059669' : '#64748B',
-                    boxShadow: loginType === type ? '0 4px 6px -1px rgba(0,0,0,0.1)' : 'none',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  {type === 'USER' ? 'Employee' : 'Unit Admin'}
-                </div>
-              ))}
+          ) : (
+            <div style={{ backgroundColor: '#10B981', padding: '1rem', borderRadius: '1rem', marginBottom: '2rem', boxShadow: '0 10px 25px -5px rgba(16, 185, 129, 0.4)' }}>
+              <Leaf color="#FFF" size={48} />
             </div>
           )}
 
-          <form onSubmit={handleLogin}>
+          <div style={{ marginBottom: '2.5rem', textAlign: 'center', width: '100%' }}>
+            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.75rem', fontWeight: 800, color: '#1F2937' }}>Welcome Back</h3>
+            <p style={{ margin: 0, color: '#6B7280', fontSize: '0.9rem' }}>
+              Please enter your credentials to continue.
+            </p>
+          </div>
+
+          <form onSubmit={handleLogin} style={{ width: '100%', maxWidth: '350px' }}>
             <div className="input-group">
-              <label className="input-label">
-                {activePortal === 'MASTER' ? 'Admin ID' : loginType === 'UNIT_ADMIN' ? 'Unit ID' : 'Employee ID'}
-              </label>
+              <label className="input-label" style={{ textAlign: 'left' }}>Login ID</label>
               <div className="input-wrapper">
                 <User size={20} color="#94A3B8" style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)' }} />
-                <input 
+                <input
                   type="text" value={id} onChange={(e) => setId(e.target.value)}
                   className="login-input"
                   placeholder="Enter your ID"
@@ -345,10 +333,10 @@ const Login = () => {
             </div>
 
             <div className="input-group">
-              <label className="input-label">Password</label>
+              <label className="input-label" style={{ textAlign: 'left' }}>Password</label>
               <div className="input-wrapper">
                 <Lock size={20} color="#94A3B8" style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)' }} />
-                <input 
+                <input
                   type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                   className="login-input"
                   placeholder="••••••••"
@@ -366,12 +354,6 @@ const Login = () => {
               Continue <ArrowRight size={20} style={{ marginLeft: '0.5rem' }} />
             </button>
           </form>
-
-          {activePortal === 'UNIT' && loginType === 'USER' && (
-            <button onClick={handleQRLogin} className="qr-btn">
-              <QrCode size={20} /> Login via QR Scan
-            </button>
-          )}
         </div>
       </div>
     </div>

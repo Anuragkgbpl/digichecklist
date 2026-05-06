@@ -9,6 +9,16 @@ const Logs = () => {
   const [auditLogs, setAuditLogs] = useState([]);
   const [activeTab, setActiveTab] = useState('submissions');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Advanced filters for submissions
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('');
+  const [shiftFilter, setShiftFilter] = useState('all');
+  const [lineFilter, setLineFilter] = useState('all');
+  const [subLineFilter, setSubLineFilter] = useState('all');
+  const [freqFilter, setFreqFilter] = useState('all');
+  const [docFilter, setDocFilter] = useState('');
+  const [userFilter, setUserFilter] = useState('');
 
   useEffect(() => {
     setSubmissions([...cloudSubmissions].reverse());
@@ -17,14 +27,55 @@ const Logs = () => {
 
   const getFilteredSubmissions = () => {
     return submissions.filter(sub => {
-      const q = searchQuery.toLowerCase();
-      return (
-        (sub.Type_of_Activity || '').toLowerCase().includes(q) ||
-        (sub.Line_Equipment || '').toLowerCase().includes(q) ||
-        (sub.Component || '').toLowerCase().includes(q) ||
-        (sub.Submitted_By || '').toLowerCase().includes(q) ||
-        (sub.Status || '').toLowerCase().includes(q)
-      );
+      // 1. Search Query
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const matchesSearch = (
+          (sub.Type_of_Activity || '').toLowerCase().includes(q) ||
+          (sub.Line_Equipment || '').toLowerCase().includes(q) ||
+          (sub.Component || '').toLowerCase().includes(q) ||
+          (sub.Submitted_By || '').toLowerCase().includes(q) ||
+          (sub.Status || '').toLowerCase().includes(q) ||
+          (sub.Activity_Description || '').toLowerCase().includes(q)
+        );
+        if (!matchesSearch) return false;
+      }
+
+      // 2. Status
+      if (statusFilter !== 'all' && sub.Status !== statusFilter) return false;
+
+      // 3. Date
+      if (dateFilter && sub.Date !== dateFilter) return false;
+
+      // 4. Shift
+      if (shiftFilter !== 'all') {
+        const s = sub.Shift || 'Gen';
+        if (s !== shiftFilter) return false;
+      }
+
+      // 5. Line
+      if (lineFilter !== 'all' && sub.Line_Equipment !== lineFilter) return false;
+
+      // 6. Sub-Line
+      if (subLineFilter !== 'all' && sub.Sub_Line_Equipment !== subLineFilter) return false;
+
+      // 7. Frequency
+      if (freqFilter !== 'all' && sub.Frequency !== freqFilter) return false;
+
+      // 8. Doc No / Rev
+      if (docFilter) {
+        const q = docFilter.toLowerCase();
+        const matchesDoc = (sub.Document_Number || '').toLowerCase().includes(q) || (String(sub.Revision) || '').toLowerCase().includes(q);
+        if (!matchesDoc) return false;
+      }
+
+      // 9. Updated By
+      if (userFilter) {
+        const q = userFilter.toLowerCase();
+        if (!(sub.Submitted_By || '').toLowerCase().includes(q)) return false;
+      }
+
+      return true;
     });
   };
 
@@ -75,11 +126,48 @@ const Logs = () => {
         </div>
 
         {/* Toolbar */}
-        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '1rem' }}>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', backgroundColor: '#FFF', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-sm)', padding: '0.4rem 0.75rem' }}>
+        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', flexWrap: 'wrap', gap: '1rem', backgroundColor: '#fff' }}>
+          <div style={{ flex: 1, minWidth: '200px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-sm)', padding: '0.4rem 0.75rem' }}>
             <Search size={16} color="var(--text-tertiary)" style={{ marginRight: '0.5rem' }} />
-            <input type="text" placeholder="Search logs..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', color: 'var(--text-primary)', fontSize: '0.875rem' }} />
+            <input type="text" placeholder="Search activities, components..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', color: 'var(--text-primary)', fontSize: '0.875rem' }} />
           </div>
+
+          {activeTab === 'submissions' && (
+            <>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', flex: 1 }}>
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="select-input" style={{ width: 'auto', minWidth: '120px', fontSize: '0.75rem', padding: '0.35rem' }}>
+                  <option value="all">All Status</option>
+                  {['Pending', 'Done', 'WIP', 'Hold', 'Postponed', 'Support Required'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                
+                <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="select-input" style={{ width: 'auto', fontSize: '0.75rem', padding: '0.35rem' }} />
+
+                <select value={shiftFilter} onChange={e => setShiftFilter(e.target.value)} className="select-input" style={{ width: 'auto', fontSize: '0.75rem', padding: '0.35rem' }}>
+                  <option value="all">All Shifts</option>
+                  {['A', 'B', 'C', 'G', 'Gen'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+
+                <select value={freqFilter} onChange={e => setFreqFilter(e.target.value)} className="select-input" style={{ width: 'auto', fontSize: '0.75rem', padding: '0.35rem' }}>
+                  <option value="all">All Freq</option>
+                  {['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Shift'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+
+                <input type="text" placeholder="Doc No..." value={docFilter} onChange={e => setDocFilter(e.target.value)} className="select-input" style={{ width: '100px', fontSize: '0.75rem', padding: '0.35rem' }} />
+                <input type="text" placeholder="Updated By..." value={userFilter} onChange={e => setUserFilter(e.target.value)} className="select-input" style={{ width: '120px', fontSize: '0.75rem', padding: '0.35rem' }} />
+
+                <button 
+                  onClick={() => {
+                    setStatusFilter('all'); setDateFilter(''); setShiftFilter('all'); 
+                    setFreqFilter('all'); setLineFilter('all'); setSubLineFilter('all');
+                    setDocFilter(''); setUserFilter(''); setSearchQuery('');
+                  }}
+                  style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', border: 'none', background: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  Reset
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Data Table */}

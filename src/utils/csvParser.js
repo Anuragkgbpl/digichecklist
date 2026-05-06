@@ -101,7 +101,8 @@ export const validateEmployees = (data) => {
         ...row,
         Status: row.Status || 'Active', // Default to Active
         password: '1234', // default password rule
-        firstLogin: true
+        firstLogin: true,
+        Allowed_Activity: ['ALL']
       });
     }
   });

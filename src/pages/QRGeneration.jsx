@@ -60,7 +60,7 @@ const QRGeneration = () => {
   const handlePrintSingle = (item) => {
     const printWindow = window.open('', '_blank');
     const scanUrl = getScanUrl(item.name);
-    
+
     printWindow.document.write(`
       <html>
         <head>
@@ -77,7 +77,7 @@ const QRGeneration = () => {
           <div class="card">
             <div id="qrcode" class="qr"></div>
             <h1>${item.name}</h1>
-            <p>${user?.unit || 'Digital PCMS'}</p>
+            <p>${user?.unit || 'Digital '}</p>
           </div>
           <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
           <script>
@@ -157,7 +157,7 @@ const QRGeneration = () => {
                   )}
                 </div>
                 <h4 style={{ margin: '0 0 0.25rem 0', color: 'var(--text-primary)', fontSize: '1.1rem' }}>{String(item.name)}</h4>
-                
+
                 <div className="no-print" style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-color)', borderRadius: 'var(--border-radius-sm)', width: '100%', fontSize: '0.75rem', textAlign: 'left', border: '1px solid var(--border-color)', marginTop: '0.5rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-secondary)' }}>
                     <Building size={11} /> {user?.unit || 'Global System'}

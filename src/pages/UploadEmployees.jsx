@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Upload, AlertCircle, CheckCircle2, XCircle, Users, Download, List, Trash2, UserMinus, UserCheck, Shield, Key, RefreshCw, Save, Eye, EyeOff, Clock, ChevronDown, Settings, Info } from 'lucide-react';
+import { Upload, AlertCircle, CheckCircle2, XCircle, Users, Download, List, Trash2, UserMinus, UserCheck, Shield, Key, RefreshCw, Save, Eye, EyeOff, Clock, ChevronDown, Settings, Info, Search } from 'lucide-react';
 import { parseCSV, validateEmployees } from '../utils/csvParser';
 import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
@@ -20,8 +20,9 @@ const UploadEmployees = () => {
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [newEmployee, setNewEmployee] = useState({
     Employee_ID: '', Employee_Name: '', Designation: '', Department: '',
-    Mobile_Number: '', Shift: '', Status: 'Active', Allowed_Activity: []
+    Mobile_Number: '', Shift: '', Status: 'Active', Allowed_Activity: ['ALL']
   });
+  const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
 
   // Dynamically fetch unique activity types from Checklist Master
@@ -115,7 +116,7 @@ const UploadEmployees = () => {
     setIsManualModalOpen(false);
     setNewEmployee({
       Employee_ID: '', Employee_Name: '', Designation: '', Department: '',
-      Mobile_Number: '', Shift: '', Status: 'Active', Allowed_Activity: []
+      Mobile_Number: '', Shift: '', Status: 'Active', Allowed_Activity: ['ALL']
     });
   };
 
@@ -176,7 +177,6 @@ const UploadEmployees = () => {
   const tabs = [
     { id: 'upload', icon: <Upload size={16} />, label: 'Upload Employees' },
     { id: 'view', icon: <List size={16} />, label: 'View Employees' },
-    { id: 'login', icon: <Key size={16} />, label: 'Login Allocation' },
     { id: 'shift', icon: <Clock size={16} />, label: 'Shift Timings' },
   ];
 
@@ -269,6 +269,16 @@ const UploadEmployees = () => {
       {/* View Tab */}
       {activeTab === 'view' && (
         <div className="card">
+          <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
+            <Search size={18} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+            <input 
+              type="text" 
+              placeholder="Search by ID, Name, Department or Designation..." 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)} 
+              style={{ width: '100%', padding: '0.6rem 1rem 0.6rem 2.5rem', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '0.875rem' }} 
+            />
+          </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap' }}>
               <thead>
@@ -279,7 +289,16 @@ const UploadEmployees = () => {
                 </tr>
               </thead>
               <tbody>
-                {employees.map((emp, i) => (
+                {employees
+                  .filter(emp => {
+                    const s = searchTerm.toLowerCase();
+                    return !s || 
+                      emp.Employee_ID?.toLowerCase().includes(s) || 
+                      emp.Employee_Name?.toLowerCase().includes(s) || 
+                      emp.Department?.toLowerCase().includes(s) || 
+                      emp.Designation?.toLowerCase().includes(s);
+                  })
+                  .map((emp, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
                     <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{emp.Employee_ID}</td>
                     <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{emp.Employee_Name}</td>
@@ -305,103 +324,6 @@ const UploadEmployees = () => {
                 {employees.length === 0 && (
                   <tr><td colSpan="8" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>No employees found. Please upload a CSV or Excel file.</td></tr>
                 )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Login Allocation Tab */}
-      {activeTab === 'login' && (
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', backgroundColor: '#EFF6FF', padding: '1rem', borderRadius: '12px', border: '1px solid #BFDBFE' }}>
-            <Key size={20} color="var(--primary-dark)" />
-            <div style={{ fontSize: '0.875rem', color: 'var(--primary-dark)' }}>
-              <strong>Multi-Select Activity Access:</strong> Assign employees to multiple departments. They will only see checklists for selected activities.
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Key size={18} /> User Access Matrix</h3>
-          </div>
-
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
-              <thead style={{ backgroundColor: '#F8FAFC', color: 'var(--text-secondary)', borderBottom: '2px solid var(--border-color)' }}>
-                <tr>
-                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Employee Name</th>
-                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Login ID</th>
-                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Current Password</th>
-                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Allowed Activities (Multi)</th>
-                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600, textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {employees.map((emp) => (
-                  <tr key={emp.Employee_ID} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <div style={{ fontWeight: 600 }}>{emp.Employee_Name}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{emp.Department}</div>
-                    </td>
-                    <td style={{ padding: '0.75rem 1rem' }}><span style={{ fontFamily: 'monospace', backgroundColor: '#F1F5F9', padding: '0.25rem 0.5rem', borderRadius: '4px' }}>{emp.Employee_ID}</span></td>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span style={{ fontFamily: 'monospace' }}>{showPasswords[emp.Employee_ID] ? (emp.password || emp.Employee_ID) : '••••••••'}</span>
-                        <button onClick={() => toggleShowPassword(emp.Employee_ID)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>{showPasswords[emp.Employee_ID] ? <EyeOff size={14} /> : <Eye size={14} />}</button>
-                      </div>
-                    </td>
-                    <td style={{ padding: '0.75rem 1rem', position: 'relative' }}>
-                      <div 
-                        onClick={() => setActiveDropdown(activeDropdown === emp.Employee_ID ? null : emp.Employee_ID)}
-                        style={{ padding: '0.4rem', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', backgroundColor: '#FFF', minWidth: '150px', fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                      >
-                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
-                          {Array.isArray(emp.Allowed_Activity) && emp.Allowed_Activity.length > 0 
-                            ? emp.Allowed_Activity.join(', ') 
-                            : 'Select Activities...'}
-                        </div>
-                        <ChevronDown size={14} />
-                      </div>
-                      
-                      {activeDropdown === emp.Employee_ID && (
-                        <div style={{ position: 'absolute', top: '100%', left: '1rem', right: '1rem', backgroundColor: '#FFF', border: '1px solid var(--border-color)', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 10, maxHeight: '200px', overflowY: 'auto', padding: '0.5rem' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem', borderRadius: '4px', cursor: 'pointer', borderBottom: '1px solid #F1F5F9', marginBottom: '0.25rem' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={emp.Allowed_Activity?.includes('ALL')} 
-                              onChange={(e) => {
-                                const next = e.target.checked ? ['ALL'] : [];
-                                const updated = employees.map(x => x.Employee_ID === emp.Employee_ID ? { ...x, Allowed_Activity: next } : x);
-                                setEmployees(updated);
-                                localStorage.setItem('pcms_employees', JSON.stringify(updated));
-                              }} 
-                            />
-                            <span style={{ fontWeight: 600, color: 'var(--primary-dark)' }}>ALL</span>
-                          </label>
-                          {dynamicActivities.map(actName => (
-                            <label key={actName} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.3rem 0.4rem', borderRadius: '4px', cursor: 'pointer' }}>
-                              <input 
-                                type="checkbox" 
-                                disabled={emp.Allowed_Activity?.includes('ALL')}
-                                checked={emp.Allowed_Activity?.includes(actName)} 
-                                onChange={async (e) => {
-                                  const current = Array.isArray(emp.Allowed_Activity) ? emp.Allowed_Activity : [];
-                                  const next = e.target.checked ? [...current, actName] : current.filter(x => x !== actName);
-                                  const updated = employees.map(x => x.Employee_ID === emp.Employee_ID ? { ...x, Allowed_Activity: next } : x);
-                                  await updateFirebase('employees', updated);
-                                }} 
-                              />
-                              <span>{actName}</span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                      <button className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem' }} onClick={() => handleResetPassword(emp)}><RefreshCw size={14} /></button>
-                    </td>
-                  </tr>
-                ))}
               </tbody>
             </table>
           </div>

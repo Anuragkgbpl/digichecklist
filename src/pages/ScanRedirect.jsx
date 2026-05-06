@@ -8,19 +8,9 @@ const ScanRedirect = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (loading) return;
-
-    if (level === 'activitytype') {
-      // Activity Type scan → show Line/Sub-Line selector first (Allow anonymous)
-      navigate(`/user/scan-select?activityType=${encodeURIComponent(name)}`);
-    } else if (!user) {
-      // Not logged in for Line/Sub-Line → go to login
-      navigate(`/login?redirect=/scan/${encodeURIComponent(level)}/${encodeURIComponent(name)}`);
-    } else {
-      // Line or Sub-Line scan → go directly to execution
-      navigate(`/user/execute?scanLevel=${encodeURIComponent(level)}&scanName=${encodeURIComponent(name)}`);
-    }
-  }, [user, loading, level, name, navigate]);
+    // Navigate everyone to the new QR landing page to enter Employee ID
+    navigate(`/scan-landing/${encodeURIComponent(level)}/${encodeURIComponent(name)}`);
+  }, [level, name, navigate]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
