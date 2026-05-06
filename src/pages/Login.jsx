@@ -60,12 +60,8 @@ const Login = () => {
     }
     // 2. Check Unit Admin Second
     else {
-      // Attempt to find unit in cloud data; fallback to localStorage if cloud data is empty
-      let unit = cloudUnits.find(u => u.id === inputId || u.name === inputId);
-      if (!unit && cloudUnits.length === 0) {
-        const localUnits = JSON.parse(localStorage.getItem('_units') || '[]');
-        unit = localUnits.find(u => u.id === inputId || u.name === inputId);
-      }
+      // Attempt to find unit in cloud data
+      let unit = cloudUnits.find(u => u.id === inputId || u.name === inputId || u.unitLoginId === inputId);
       if (unit) {
         if (unit.password && unit.password !== inputPass) {
           setError('Incorrect password.');
@@ -74,12 +70,8 @@ const Login = () => {
         role = 'UNIT_ADMIN';
         actualUser = { id: unit.id, name: unit.name, role: 'UNIT_ADMIN', unit: unit.name, allowedActivity: 'ALL' };
       } else {
-        // Attempt to find employee in cloud data; fallback to localStorage if cloud data is empty
+        // Attempt to find employee in cloud data
         let emp = cloudEmployees.find(e => e.Employee_ID === inputId);
-        if (!emp && cloudEmployees.length === 0) {
-          const localEmps = JSON.parse(localStorage.getItem('_employees') || '[]');
-          emp = localEmps.find(e => e.Employee_ID === inputId);
-        }
         if (emp) {
           if (emp.Status === 'Inactive') {
             setError('This account is marked as Inactive.');
