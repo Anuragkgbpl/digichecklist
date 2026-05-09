@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { PlayCircle, Camera, X, Inbox, Info, CheckCircle, AlertCircle, Image, ZoomIn, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { validateChecklistTiming, getCurrentShift } from '../utils/shiftUtils';
+import { validateChecklistTiming, getCurrentShift, getCurrentDailyCycleRange, getShiftRange } from '../utils/shiftUtils';
+
 
 // ── Progress Bar ──────────────────────────────────────────────
 const ProgressBar = ({ items, statusUpdates }) => {
@@ -135,10 +136,19 @@ const Execution = () => {
   const [remarks, setRemarks] = useState({});
   const [supportDetails, setSupportDetails] = useState({});
   const [photos, setPhotos] = useState({});
+  const [postponeDates, setPostponeDates] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [lightboxPhoto, setLightboxPhoto] = useState(null);
   const photoInputRefs = useRef({});
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const isAllActivities = useMemo(() => {
     return user?.allowedActivity === 'ALL' || (Array.isArray(user?.allowedActivity) && user.allowedActivity.includes('ALL'));
@@ -243,7 +253,64 @@ const Execution = () => {
     });
 
     const deduplicated = Array.from(uniqueMap.values());
-    setChecklists(deduplicated);
+    
+    // Filter out completed "Done" items or future postponed items
+    const dailyRange = getCurrentDailyCycleRange(shiftMaster);
+    const now = new Date();
+    const filteredByDone = deduplicated.filter(chk => {
+      const freq = String(chk.Frequency || '').trim().toLowerCase();
+      
+      // 1. Filter out postponed items whose target date is in the future
+      const isPostponed = (cloudSubmissions || []).some(sub => {
+        const matchesKey = 
+          String(sub.Type_of_Activity || '').trim().toLowerCase() === String(chk.Type_of_Activity || '').trim().toLowerCase() &&
+          String(sub.Line_Equipment || '').trim().toLowerCase() === String(chk.Line_Equipment || '').trim().toLowerCase() &&
+          String(sub.Sub_Line_Equipment || '').trim().toLowerCase() === String(chk.Sub_Line_Equipment || '').trim().toLowerCase() &&
+          String(sub.Component || '').trim().toLowerCase() === String(chk.Component || '').trim().toLowerCase() &&
+          String(sub.Activity_Description || '').trim().toLowerCase() === String(chk.Activity_Description || '').trim().toLowerCase();
+
+        if (!matchesKey) return false;
+        if (sub.Status !== 'Postponed' && sub.Status !== 'Postpone') return false;
+        if (!sub.Postponed_To_Date) return false;
+
+        const todayStr = now.toISOString().split('T')[0];
+        return todayStr < sub.Postponed_To_Date;
+      });
+
+      if (isPostponed) return false;
+
+      // 2. Filter out completed "Done" items for Daily and Shift frequencies
+      if (freq !== 'daily' && freq !== 'shift') return true;
+
+      const isDone = (cloudSubmissions || []).some(sub => {
+        const matchesKey = 
+          String(sub.Type_of_Activity || '').trim().toLowerCase() === String(chk.Type_of_Activity || '').trim().toLowerCase() &&
+          String(sub.Line_Equipment || '').trim().toLowerCase() === String(chk.Line_Equipment || '').trim().toLowerCase() &&
+          String(sub.Sub_Line_Equipment || '').trim().toLowerCase() === String(chk.Sub_Line_Equipment || '').trim().toLowerCase() &&
+          String(sub.Component || '').trim().toLowerCase() === String(chk.Component || '').trim().toLowerCase() &&
+          String(sub.Activity_Description || '').trim().toLowerCase() === String(chk.Activity_Description || '').trim().toLowerCase();
+
+        if (!matchesKey) return false;
+        if (sub.Status !== 'Done') return false;
+
+        const subTime = sub.Date_Timestamp ? new Date(sub.Date_Timestamp) : new Date(sub.Date || Date.now());
+        
+        if (freq === 'daily') {
+          return subTime >= dailyRange.start && subTime < dailyRange.end;
+        } else if (freq === 'shift') {
+          const currentShiftId = getCurrentShift(shiftMaster);
+          if (!currentShiftId) return false;
+          const shiftRange = getShiftRange(currentShiftId, shiftMaster);
+          if (!shiftRange) return false;
+          return subTime >= shiftRange.start && subTime < shiftRange.end;
+        }
+        return false;
+      });
+
+      return !isDone;
+    });
+
+    setChecklists(filteredByDone);
 
     // Smart default frequency: honor URL or pick best available
     if (accessible.length > 0) {
@@ -259,7 +326,7 @@ const Execution = () => {
         }
       }
     }
-  }, [user, scanLevel, scanName, urlActivityType, urlLine, urlSubLine, urlComponent, urlFrequency, isAllActivities, cloudChecklists, dataLoading]);
+  }, [user, scanLevel, scanName, urlActivityType, urlLine, urlSubLine, urlComponent, urlFrequency, isAllActivities, cloudChecklists, dataLoading, cloudSubmissions, shiftMaster]);
 
   // Validate timing for selected frequency
   const timingValidation = useMemo(() => {
@@ -320,7 +387,14 @@ const Execution = () => {
     const now = new Date();
 
     try {
-      const newRecords = filteredChecklists.map(c => ({
+      const submittedItems = filteredChecklists.filter(c => {
+        const s = statusUpdates[c.id] || 'Pending';
+        return s === 'Done';
+      });
+
+      const currentShiftId = getCurrentShift(shiftMaster) || 'General';
+
+      const newRecords = submittedItems.map(c => ({
         id: `${Date.now()}-${c.id}`,
         Date: now.toISOString().split('T')[0],
         Type_of_Activity: c.Type_of_Activity,
@@ -339,7 +413,8 @@ const Execution = () => {
         Last_Revised_Date: c.Last_Revised_Date || '-',
         Submitted_By: (user?.name || '') + ' (' + (user?.id || '') + ')',
         Submitted_By_ID: user?.id || '',
-        Date_Timestamp: now.toISOString()
+        Date_Timestamp: now.toISOString(),
+        Shift: currentShiftId
       }));
 
       const supportItems = filteredChecklists.filter(c => statusUpdates[c.id] === 'Support Required');
@@ -517,100 +592,222 @@ const Execution = () => {
 
         <ProgressBar items={filteredChecklists} statusUpdates={statusUpdates} />
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', textAlign: 'left' }}>
-                <th style={{ padding: '0.75rem 0.75rem', fontWeight: 600 }}>#</th>
-                <th style={{ padding: '0.75rem 0.75rem', fontWeight: 600 }}>Component / Activity</th>
-                <th style={{ padding: '0.75rem 0.75rem', fontWeight: 600 }}>Line / Sub-Line</th>
-                <th style={{ padding: '0.75rem 0.75rem', fontWeight: 600 }}>Type</th>
-                <th style={{ padding: '0.75rem 0.75rem', fontWeight: 600, minWidth: '160px' }}>Status</th>
-                <th style={{ padding: '0.75rem 0.75rem', fontWeight: 600, minWidth: '200px' }}>Remark & Photo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredChecklists.map((chk, idx) => {
-                const status = statusUpdates[chk.id] || 'Pending';
-                const isSupport = status === 'Support Required';
-                const sColor = getStatusColor(status);
-                return (
-                  <React.Fragment key={chk.id}>
-                    <tr style={{ borderBottom: isSupport ? 'none' : '1px solid var(--border-color)', backgroundColor: isSupport ? '#FFF5F5' : 'transparent' }}>
-                      <td style={{ padding: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>{idx + 1}</td>
-                      <td style={{ padding: '0.75rem' }}>
-                        <div style={{ fontWeight: 600 }}>{chk.Component}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>{chk.Activity_Description}</div>
-                      </td>
-                      <td style={{ padding: '0.75rem' }}>
-                        <div>{chk.Line_Equipment}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{chk.Sub_Line_Equipment}</div>
-                      </td>
-                      <td style={{ padding: '0.75rem' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                          <span style={{ fontSize: '0.72rem', fontWeight: 600, backgroundColor: '#F1F5F9', padding: '0.2rem 0.5rem', borderRadius: '4px', width: 'fit-content' }}>{chk.Type_of_Activity}</span>
-                          <span style={{ fontSize: '0.65rem', fontWeight: 700, backgroundColor: '#FEF3C7', color: '#92400E', padding: '0.1rem 0.4rem', borderRadius: '4px', width: 'fit-content' }}>{chk.Frequency}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '0.75rem' }}>
-                        <select value={status} onChange={e => setStatusUpdates(p => ({ ...p, [chk.id]: e.target.value }))} style={{ width: '100%', padding: '0.45rem 0.5rem', borderRadius: '6px', border: `1.5px solid ${sColor}`, backgroundColor: `${sColor}15`, color: sColor, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}>
-                          <option value="Pending">Pending</option>
-                          <option value="Done">Done</option>
-                          <option value="WIP">In Progress</option>
-                          <option value="Hold">Hold</option>
-                          <option value="Postponed">Postponed</option>
-                          <option value="Support Required">Support Required</option>
-                        </select>
-                      </td>
-                      <td style={{ padding: '0.75rem' }}>
-                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                          <input type="text" placeholder={isSupport ? 'Describe issue...' : 'Optional remark...'} value={remarks[chk.id] || ''} onChange={e => setRemarks(p => ({ ...p, [chk.id]: e.target.value }))} style={{ flex: 1, padding: '0.4rem 0.5rem', borderRadius: '6px', border: `1px solid ${isSupport ? '#FCA5A5' : 'var(--border-color)'}`, fontSize: '0.8rem', outline: 'none', minWidth: 0 }} />
-                          <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} ref={el => photoInputRefs.current[chk.id] = el} onChange={e => handlePhotoCapture(chk.id, e.target.files[0])} />
-                          <button onClick={() => photoInputRefs.current[chk.id]?.click()} title="Attach Photo" style={{ background: photos[chk.id] ? '#ECFDF5' : '#F8FAFC', border: `1px solid ${photos[chk.id] ? '#6EE7B7' : 'var(--border-color)'}`, borderRadius: '6px', padding: '0.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center', color: photos[chk.id] ? '#059669' : 'var(--text-tertiary)', flexShrink: 0 }}>
-                            <Camera size={15} />
-                          </button>
-                          {photos[chk.id] && (
-                            <button onClick={() => setLightboxPhoto(photos[chk.id])} title="View Photo" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', flexShrink: 0 }}>
-                              <img src={photos[chk.id]} alt="thumb" style={{ width: '28px', height: '28px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #6EE7B7' }} />
+        {isMobile ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {filteredChecklists.map((chk, idx) => {
+              const status = statusUpdates[chk.id] || 'Pending';
+              const isSupport = status === 'Support Required';
+              const sColor = getStatusColor(status);
+              return (
+                <div 
+                  key={chk.id} 
+                  style={{ 
+                    border: `1px solid ${isSupport ? '#FCA5A5' : 'var(--border-color)'}`, 
+                    borderRadius: '12px', 
+                    padding: '1rem', 
+                    backgroundColor: isSupport ? '#FFF5F5' : '#FFFFFF',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.75rem'
+                  }}
+                >
+                  {/* Card Header: Item # and Type info */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-tertiary)' }}>TASK #{idx + 1}</span>
+                    <div style={{ display: 'flex', gap: '0.3rem' }}>
+                      <span style={{ fontSize: '0.65rem', fontWeight: 600, backgroundColor: '#F1F5F9', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>{chk.Type_of_Activity}</span>
+                      <span style={{ fontSize: '0.65rem', fontWeight: 700, backgroundColor: '#FEF3C7', color: '#92400E', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>{chk.Frequency}</span>
+                    </div>
+                  </div>
+
+                  {/* Component & Description */}
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{chk.Component}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>{chk.Activity_Description}</div>
+                  </div>
+
+                  {/* Location info */}
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', backgroundColor: '#F8FAFC', padding: '0.4rem 0.6rem', borderRadius: '6px' }}>
+                    <strong>📍 Location:</strong> {chk.Line_Equipment} {chk.Sub_Line_Equipment && `• ${chk.Sub_Line_Equipment}`}
+                  </div>
+
+                  {/* Status Dropdown */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>UPDATE STATUS:</label>
+                    <select 
+                      value={status} 
+                      onChange={e => setStatusUpdates(p => ({ ...p, [chk.id]: e.target.value }))} 
+                      style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: `1.5px solid ${sColor}`, backgroundColor: `${sColor}15`, color: sColor, fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Done">Done</option>
+                      <option value="WIP">In Progress</option>
+                      <option value="Hold">Hold</option>
+                      <option value="Support Required">Support Required</option>
+                    </select>
+                  </div>
+
+                  {/* Remarks & Photos */}
+                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                    <input 
+                      type="text" 
+                      placeholder={isSupport ? 'Describe issue...' : 'Optional remark...'} 
+                      value={remarks[chk.id] || ''} 
+                      onChange={e => setRemarks(p => ({ ...p, [chk.id]: e.target.value }))} 
+                      style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: `1px solid ${isSupport ? '#FCA5A5' : 'var(--border-color)'}`, fontSize: '0.8rem', outline: 'none', minWidth: 0 }} 
+                    />
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      capture="environment" 
+                      style={{ display: 'none' }} 
+                      ref={el => photoInputRefs.current[chk.id] = el} 
+                      onChange={e => handlePhotoCapture(chk.id, e.target.files[0])} 
+                    />
+                    <button 
+                      onClick={() => photoInputRefs.current[chk.id]?.click()} 
+                      title="Attach Photo" 
+                      style={{ background: photos[chk.id] ? '#ECFDF5' : '#F8FAFC', border: `1px solid ${photos[chk.id] ? '#6EE7B7' : 'var(--border-color)'}`, borderRadius: '8px', padding: '0.45rem', cursor: 'pointer', display: 'flex', alignItems: 'center', color: photos[chk.id] ? '#059669' : 'var(--text-tertiary)', flexShrink: 0 }}
+                    >
+                      <Camera size={16} />
+                    </button>
+                    {photos[chk.id] && (
+                      <button 
+                        onClick={() => setLightboxPhoto(photos[chk.id])} 
+                        title="View Photo" 
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', flexShrink: 0 }}
+                      >
+                        <img src={photos[chk.id]} alt="thumb" style={{ width: '32px', height: '32px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #6EE7B7' }} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Support Details section */}
+                  {isSupport && (
+                    <div style={{ backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#DC2626' }}>🔧 Support Allocation Details:</span>
+                      <select 
+                        value={supportDetails[chk.id]?.dept || ''} 
+                        onChange={e => handleSupportChange(chk.id, 'dept', e.target.value)} 
+                        style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', border: '1px solid #FCA5A5', fontSize: '0.8rem', color: '#991B1B' }}
+                      >
+                        <option value="">-- Select Department --</option>
+                        {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                      <AutoCompleteEmployee 
+                        employees={(employees || []).filter(e => !supportDetails[chk.id]?.dept || e.Department === supportDetails[chk.id]?.dept)}
+                        value={supportDetails[chk.id]?.assignedTo || ''}
+                        onChange={(val) => handleSupportChange(chk.id, 'assignedTo', val)}
+                        placeholder="Type name or ID..."
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {filteredChecklists.length === 0 && (
+              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-tertiary)', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <AlertCircle size={32} style={{ display: 'block', margin: '0 auto 0.5rem', opacity: 0.4 }} />
+                {checklists.length === 0 ? 'No checklists available.' : 'No activities found.'}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', textAlign: 'left' }}>
+                  <th style={{ padding: '0.75rem 0.75rem', fontWeight: 600 }}>#</th>
+                  <th style={{ padding: '0.75rem 0.75rem', fontWeight: 600 }}>Component / Activity</th>
+                  <th style={{ padding: '0.75rem 0.75rem', fontWeight: 600 }}>Line / Sub-Line</th>
+                  <th style={{ padding: '0.75rem 0.75rem', fontWeight: 600 }}>Type</th>
+                  <th style={{ padding: '0.75rem 0.75rem', fontWeight: 600, minWidth: '160px' }}>Status</th>
+                  <th style={{ padding: '0.75rem 0.75rem', fontWeight: 600, minWidth: '200px' }}>Remark & Photo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredChecklists.map((chk, idx) => {
+                  const status = statusUpdates[chk.id] || 'Pending';
+                  const isSupport = status === 'Support Required';
+                  const sColor = getStatusColor(status);
+                  return (
+                    <React.Fragment key={chk.id}>
+                      <tr style={{ borderBottom: isSupport ? 'none' : '1px solid var(--border-color)', backgroundColor: isSupport ? '#FFF5F5' : 'transparent' }}>
+                        <td style={{ padding: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>{idx + 1}</td>
+                        <td style={{ padding: '0.75rem' }}>
+                          <div style={{ fontWeight: 600 }}>{chk.Component}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>{chk.Activity_Description}</div>
+                        </td>
+                        <td style={{ padding: '0.75rem' }}>
+                          <div>{chk.Line_Equipment}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{chk.Sub_Line_Equipment}</div>
+                        </td>
+                        <td style={{ padding: '0.75rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 600, backgroundColor: '#F1F5F9', padding: '0.2rem 0.5rem', borderRadius: '4px', width: 'fit-content' }}>{chk.Type_of_Activity}</span>
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, backgroundColor: '#FEF3C7', color: '#92400E', padding: '0.1rem 0.4rem', borderRadius: '4px', width: 'fit-content' }}>{chk.Frequency}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.75rem' }}>
+                          <select value={status} onChange={e => setStatusUpdates(p => ({ ...p, [chk.id]: e.target.value }))} style={{ width: '100%', padding: '0.45rem 0.5rem', borderRadius: '6px', border: `1.5px solid ${sColor}`, backgroundColor: `${sColor}15`, color: sColor, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}>
+                            <option value="Pending">Pending</option>
+                            <option value="Done">Done</option>
+                            <option value="WIP">In Progress</option>
+                            <option value="Hold">Hold</option>
+                            <option value="Support Required">Support Required</option>
+                          </select>
+                        </td>
+                        <td style={{ padding: '0.75rem' }}>
+                          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                            <input type="text" placeholder={isSupport ? 'Describe issue...' : 'Optional remark...'} value={remarks[chk.id] || ''} onChange={e => setRemarks(p => ({ ...p, [chk.id]: e.target.value }))} style={{ flex: 1, padding: '0.4rem 0.5rem', borderRadius: '6px', border: `1px solid ${isSupport ? '#FCA5A5' : 'var(--border-color)'}`, fontSize: '0.8rem', outline: 'none', minWidth: 0 }} />
+                            <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} ref={el => photoInputRefs.current[chk.id] = el} onChange={e => handlePhotoCapture(chk.id, e.target.files[0])} />
+                            <button onClick={() => photoInputRefs.current[chk.id]?.click()} title="Attach Photo" style={{ background: photos[chk.id] ? '#ECFDF5' : '#F8FAFC', border: `1px solid ${photos[chk.id] ? '#6EE7B7' : 'var(--border-color)'}`, borderRadius: '6px', padding: '0.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center', color: photos[chk.id] ? '#059669' : 'var(--text-tertiary)', flexShrink: 0 }}>
+                              <Camera size={15} />
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                    {isSupport && (
-                      <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: '#FFF5F5' }}>
-                        <td />
-                        <td colSpan="5" style={{ padding: '0 0.75rem 0.75rem 0.75rem' }}>
-                          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', padding: '0.6rem 0.75rem', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#DC2626', whiteSpace: 'nowrap' }}>🔧 Support Details:</span>
-                            <select value={supportDetails[chk.id]?.dept || ''} onChange={e => handleSupportChange(chk.id, 'dept', e.target.value)} style={{ padding: '0.35rem 0.5rem', borderRadius: '6px', border: '1px solid #FCA5A5', fontSize: '0.8rem', color: '#991B1B', flex: 1, minWidth: '140px' }}>
-                              <option value="">-- Allocate Department --</option>
-                              {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                            </select>
-                            <AutoCompleteEmployee 
-                              employees={(employees || []).filter(e => !supportDetails[chk.id]?.dept || e.Department === supportDetails[chk.id]?.dept)}
-                              value={supportDetails[chk.id]?.assignedTo || ''}
-                              onChange={(val) => handleSupportChange(chk.id, 'assignedTo', val)}
-                              placeholder="Type name or ID..."
-                            />
+                            {photos[chk.id] && (
+                              <button onClick={() => setLightboxPhoto(photos[chk.id])} title="View Photo" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', flexShrink: 0 }}>
+                                <img src={photos[chk.id]} alt="thumb" style={{ width: '28px', height: '28px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #6EE7B7' }} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-              {filteredChecklists.length === 0 && (
-                <tr><td colSpan="6" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-                  <AlertCircle size={32} style={{ display: 'block', margin: '0 auto 0.5rem', opacity: 0.4 }} />
-                  {checklists.length === 0 ? 'No checklists available. Upload a Checklist Master first.' : 
-                   selectedComponent !== 'ALL' ? `No activities found for Frequency "${selectedFrequency}" and Component "${selectedComponent}".` :
-                   `No activities found for Frequency "${selectedFrequency}".`}
-                </td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                      {isSupport && (
+                        <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: '#FFF5F5' }}>
+                          <td />
+                          <td colSpan="5" style={{ padding: '0 0.75rem 0.75rem 0.75rem' }}>
+                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', padding: '0.6rem 0.75rem', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#DC2626', whiteSpace: 'nowrap' }}>🔧 Support Details:</span>
+                              <select value={supportDetails[chk.id]?.dept || ''} onChange={e => handleSupportChange(chk.id, 'dept', e.target.value)} style={{ padding: '0.35rem 0.5rem', borderRadius: '6px', border: '1px solid #FCA5A5', fontSize: '0.8rem', color: '#991B1B', flex: 1, minWidth: '140px' }}>
+                                <option value="">-- Allocate Department --</option>
+                                {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                              </select>
+                              <AutoCompleteEmployee 
+                                employees={(employees || []).filter(e => !supportDetails[chk.id]?.dept || e.Department === supportDetails[chk.id]?.dept)}
+                                value={supportDetails[chk.id]?.assignedTo || ''}
+                                onChange={(val) => handleSupportChange(chk.id, 'assignedTo', val)}
+                                placeholder="Type name or ID..."
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+                {filteredChecklists.length === 0 && (
+                  <tr><td colSpan="6" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                    <AlertCircle size={32} style={{ display: 'block', margin: '0 auto 0.5rem', opacity: 0.4 }} />
+                    {checklists.length === 0 ? 'No checklists available. Upload a Checklist Master first.' : 
+                     selectedComponent !== 'ALL' ? `No activities found for Frequency "${selectedFrequency}" and Component "${selectedComponent}".` :
+                     `No activities found for Frequency "${selectedFrequency}".`}
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           {supportCount > 0 && !submitSuccess && (

@@ -106,6 +106,14 @@ const UploadChecklist = () => {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (window.confirm('WARNING: Are you sure you want to delete ALL checklist items? This action cannot be undone.')) {
+      if (window.confirm('Please confirm again. Type OK to proceed.')) {
+        await updateFirebase('checklists', []);
+      }
+    }
+  };
+
   const toggleStatus = async (id) => {
     const updated = checklists.map(chk => {
       if (chk.id === id) {
@@ -137,6 +145,9 @@ const UploadChecklist = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h2 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}><ClipboardList /> Unit Checklist Master</h2>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button onClick={handleDeleteAll} className="btn" style={{ padding: '0.5rem 1rem', backgroundColor: '#FEE2E2', color: '#DC2626', border: 'none', fontWeight: 600 }}>
+            Delete All
+          </button>
           <button onClick={() => setIsManualModalOpen(true)} className="btn btn-primary" style={{ padding: '0.5rem 1rem' }}>
             + Add Activity
           </button>

@@ -12,7 +12,7 @@ const PhotoLightbox = ({ src, onClose }) => (
 
 const SupportInbox = () => {
   const { user } = useAuth();
-  const { supportInbox = [], updateFirebase, employees = [] } = useData();
+  const { supportInbox = [], updateFirebase, employees = [], submissions = [] } = useData();
   const [adminReply, setAdminReply] = useState({});
   const [userReply, setUserReply] = useState({});
   const [userAction, setUserAction] = useState({});
@@ -28,6 +28,98 @@ const SupportInbox = () => {
 
   const isAdmin = user?.role === 'UNIT_ADMIN' || user?.role === 'MASTER_ADMIN';
   const [activeTab, setActiveTab] = useState(isAdmin ? 'all' : 'allocated_by_me');
+
+  // Submission logs states and filters
+  const [logStartDate, setLogStartDate] = useState('');
+  const [logEndDate, setLogEndDate] = useState('');
+  const [logShiftFilter, setLogShiftFilter] = useState('all');
+  const [logDocFilter, setLogDocFilter] = useState('');
+  const [logSubmittedByFilter, setLogSubmittedByFilter] = useState('');
+  const [logDescFilter, setLogDescFilter] = useState('');
+  const [logActivityTypeFilter, setLogActivityTypeFilter] = useState('all');
+  const [logLineFilter, setLogLineFilter] = useState('');
+  const [logSubLineFilter, setLogSubLineFilter] = useState('');
+  const [logComponentFilter, setLogComponentFilter] = useState('');
+  const [logFreqFilter, setLogFreqFilter] = useState('all');
+  const [logStatusFilter, setLogStatusFilter] = useState('all');
+
+  const activityTypes = useMemo(() => {
+    return ['all', ...new Set(submissions.map(s => s.Type_of_Activity).filter(Boolean))];
+  }, [submissions]);
+
+  const filteredSubmissions = useMemo(() => {
+    if (activeTab !== 'submission_logs') return [];
+    
+    return submissions.filter(sub => {
+      // Description filter
+      if (logDescFilter) {
+        const q = logDescFilter.toLowerCase();
+        const descMatch = (sub.Activity_Description || '').toLowerCase().includes(q) ||
+                          (sub.Component || '').toLowerCase().includes(q);
+        if (!descMatch) return false;
+      }
+      
+      // Activity Type filter
+      if (logActivityTypeFilter !== 'all') {
+        if (sub.Type_of_Activity !== logActivityTypeFilter) return false;
+      }
+      
+      // Shift filter
+      if (logShiftFilter !== 'all') {
+        const s = sub.Shift || 'Gen';
+        if (s !== logShiftFilter) return false;
+      }
+      
+      // Doc Number filter
+      if (logDocFilter) {
+        const q = logDocFilter.toLowerCase();
+        if (!(sub.Document_Number || '').toLowerCase().includes(q)) return false;
+      }
+      
+      // Submitted By filter
+      if (logSubmittedByFilter) {
+        const q = logSubmittedByFilter.toLowerCase();
+        if (!(sub.Submitted_By || '').toLowerCase().includes(q)) return false;
+      }
+
+      // Line filter
+      if (logLineFilter) {
+        const q = logLineFilter.toLowerCase();
+        if (!(sub.Line_Equipment || '').toLowerCase().includes(q)) return false;
+      }
+
+      // Sub-Line filter
+      if (logSubLineFilter) {
+        const q = logSubLineFilter.toLowerCase();
+        if (!(sub.Sub_Line_Equipment || '').toLowerCase().includes(q)) return false;
+      }
+
+      // Component filter
+      if (logComponentFilter) {
+        const q = logComponentFilter.toLowerCase();
+        if (!(sub.Component || '').toLowerCase().includes(q)) return false;
+      }
+
+      // Freq filter
+      if (logFreqFilter !== 'all') {
+        if (String(sub.Frequency || '').trim().toLowerCase() !== logFreqFilter.toLowerCase()) return false;
+      }
+
+      // Status filter
+      if (logStatusFilter !== 'all') {
+        if (String(sub.Status || '').trim().toLowerCase() !== logStatusFilter.toLowerCase()) return false;
+      }
+      
+      // Date Custom Ranges filter
+      const subDateStr = sub.Date;
+      if (subDateStr) {
+        if (logStartDate && subDateStr < logStartDate) return false;
+        if (logEndDate && subDateStr > logEndDate) return false;
+      }
+      
+      return true;
+    }).reverse();
+  }, [submissions, activeTab, logStartDate, logEndDate, logShiftFilter, logDocFilter, logSubmittedByFilter, logDescFilter, logActivityTypeFilter, logLineFilter, logSubLineFilter, logComponentFilter, logFreqFilter, logStatusFilter]);
 
   const getDuration = (start, end) => {
     if (!start) return '-';
@@ -281,84 +373,276 @@ const SupportInbox = () => {
         >
           Allocated To Me
         </button>
+        <button 
+          onClick={() => setActiveTab('submission_logs')}
+          style={{ background: 'none', border: 'none', borderBottom: activeTab === 'submission_logs' ? '2px solid var(--primary-light)' : 'none', color: activeTab === 'submission_logs' ? 'var(--primary-light)' : 'var(--text-secondary)', padding: '0.5rem 1rem', fontWeight: activeTab === 'submission_logs' ? 700 : 500, cursor: 'pointer', marginBottom: '-2px' }}
+        >
+          Submitted Logs
+        </button>
       </div>
 
       {/* Unified Filters */}
-      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
-        <div style={{ flex: 1, minWidth: '150px' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Search Name / Location</label>
-          <input 
-            type="text" 
-            placeholder="Search..." 
-            value={nameFilter} 
-            onChange={e => setNameFilter(e.target.value)} 
-            className="login-input" 
-            style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
-          />
-        </div>
-        
-        <div style={{ width: '150px' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Filter Date</label>
-          <input 
-            type="date" 
-            value={dateFilter} 
-            onChange={e => setDateFilter(e.target.value)} 
-            className="login-input" 
-            style={{ padding: '0.35rem 0.5rem', fontSize: '0.875rem' }} 
-          />
-        </div>
+      {activeTab !== 'submission_logs' && (
+        <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1, minWidth: '150px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Search Name / Location</label>
+            <input 
+              type="text" 
+              placeholder="Search..." 
+              value={nameFilter} 
+              onChange={e => setNameFilter(e.target.value)} 
+              className="login-input" 
+              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
+            />
+          </div>
+          
+          <div style={{ width: '150px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Filter Date</label>
+            <input 
+              type="date" 
+              value={dateFilter} 
+              onChange={e => setDateFilter(e.target.value)} 
+              className="login-input" 
+              style={{ padding: '0.35rem 0.5rem', fontSize: '0.875rem' }} 
+            />
+          </div>
 
-        <div style={{ width: '150px' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Status</label>
-          <select 
-            value={statusFilter} 
-            onChange={e => setStatusFilter(e.target.value)} 
-            className="select-input" 
-            style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem' }}
-          >
-            <option value="all">All Statuses</option>
-            <option value="Open">Open</option>
-            <option value="Pending">Pending</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Resolved">Resolved / Done</option>
-            <option value="Hold">Hold</option>
-            <option value="Support Required">Support Required</option>
-            <option value="Postpone">Postpone</option>
-          </select>
-        </div>
-
-        {isAdmin && activeTab === 'all' && (
-          <div style={{ width: '180px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Duration (Admin)</label>
+          <div style={{ width: '150px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Status</label>
             <select 
-              value={adminDurationFilter} 
-              onChange={e => setAdminDurationFilter(e.target.value)} 
+              value={statusFilter} 
+              onChange={e => setStatusFilter(e.target.value)} 
               className="select-input" 
               style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem' }}
             >
-              <option value="all">All Items</option>
-              <option value="24">Pending &gt; 24 Hours</option>
-              <option value="48">Pending &gt; 48 Hours</option>
-              <option value="72">Pending &gt; 3 Days</option>
-              <option value="168">Pending &gt; 1 Week</option>
+              <option value="all">All Statuses</option>
+              <option value="Open">Open</option>
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Resolved">Resolved / Done</option>
+              <option value="Hold">Hold</option>
+              <option value="Support Required">Support Required</option>
+              <option value="Postpone">Postpone</option>
             </select>
           </div>
-        )}
 
-        <button 
-          onClick={() => { setDateFilter(''); setNameFilter(''); setStatusFilter('all'); setAdminDurationFilter('all'); }}
-          style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}
-        >
-          Reset Filters
-        </button>
-      </div>
+          {isAdmin && activeTab === 'all' && (
+            <div style={{ width: '180px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Duration (Admin)</label>
+              <select 
+                value={adminDurationFilter} 
+                onChange={e => setAdminDurationFilter(e.target.value)} 
+                className="select-input" 
+                style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem' }}
+              >
+                <option value="all">All Items</option>
+                <option value="24">Pending &gt; 24 Hours</option>
+                <option value="48">Pending &gt; 48 Hours</option>
+                <option value="72">Pending &gt; 3 Days</option>
+                <option value="168">Pending &gt; 1 Week</option>
+              </select>
+            </div>
+          )}
+
+          <button 
+            onClick={() => { setDateFilter(''); setNameFilter(''); setStatusFilter('all'); setAdminDurationFilter('all'); }}
+            style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}
+          >
+            Reset Filters
+          </button>
+        </div>
+      )}
+
+      {/* Submission Logs Filters */}
+      {activeTab === 'submission_logs' && (
+        <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1, minWidth: '150px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Description Search</label>
+            <input 
+              type="text" 
+              placeholder="Search description..." 
+              value={logDescFilter} 
+              onChange={e => setLogDescFilter(e.target.value)} 
+              className="login-input" 
+              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
+            />
+          </div>
+
+          <div style={{ width: '150px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Activity Type</label>
+            <select 
+              value={logActivityTypeFilter} 
+              onChange={e => setLogActivityTypeFilter(e.target.value)} 
+              className="select-input" 
+              style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem' }}
+            >
+              {activityTypes.map(type => (
+                <option key={type} value={type}>{type === 'all' ? 'All Activities' : type}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ width: '130px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Shift</label>
+            <select 
+              value={logShiftFilter} 
+              onChange={e => setLogShiftFilter(e.target.value)} 
+              className="select-input" 
+              style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem' }}
+            >
+              <option value="all">All Shifts</option>
+              <option value="A">Shift A</option>
+              <option value="B">Shift B</option>
+              <option value="C">Shift C</option>
+              <option value="G">Shift G</option>
+              <option value="Gen">Gen</option>
+            </select>
+          </div>
+
+          <div style={{ width: '130px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Doc Number</label>
+            <input 
+              type="text" 
+              placeholder="Doc No..." 
+              value={logDocFilter} 
+              onChange={e => setLogDocFilter(e.target.value)} 
+              className="login-input" 
+              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
+            />
+          </div>
+
+          <div style={{ width: '130px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Submitted By</label>
+            <input 
+              type="text" 
+              placeholder="Name or ID..." 
+              value={logSubmittedByFilter} 
+              onChange={e => setLogSubmittedByFilter(e.target.value)} 
+              className="login-input" 
+              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
+            />
+          </div>
+
+          <div style={{ width: '130px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Line</label>
+            <input 
+              type="text" 
+              placeholder="Line..." 
+              value={logLineFilter} 
+              onChange={e => setLogLineFilter(e.target.value)} 
+              className="login-input" 
+              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
+            />
+          </div>
+
+          <div style={{ width: '130px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Sub-Line</label>
+            <input 
+              type="text" 
+              placeholder="Sub-Line..." 
+              value={logSubLineFilter} 
+              onChange={e => setLogSubLineFilter(e.target.value)} 
+              className="login-input" 
+              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
+            />
+          </div>
+
+          <div style={{ width: '130px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Component</label>
+            <input 
+              type="text" 
+              placeholder="Component..." 
+              value={logComponentFilter} 
+              onChange={e => setLogComponentFilter(e.target.value)} 
+              className="login-input" 
+              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
+            />
+          </div>
+
+          <div style={{ width: '130px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Freq.</label>
+            <select 
+              value={logFreqFilter} 
+              onChange={e => setLogFreqFilter(e.target.value)} 
+              className="select-input" 
+              style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem' }}
+            >
+              <option value="all">All Freq.</option>
+              <option value="daily">Daily</option>
+              <option value="shift">Shift</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+
+          <div style={{ width: '130px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Status</label>
+            <select 
+              value={logStatusFilter} 
+              onChange={e => setLogStatusFilter(e.target.value)} 
+              className="select-input" 
+              style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem' }}
+            >
+              <option value="all">All Status</option>
+              <option value="done">Done</option>
+              <option value="wip">In Progress</option>
+              <option value="hold">Hold</option>
+              <option value="support required">Support Required</option>
+            </select>
+          </div>
+
+          <div style={{ width: '140px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Start Date</label>
+            <input 
+              type="date" 
+              value={logStartDate} 
+              onChange={e => setLogStartDate(e.target.value)} 
+              className="login-input" 
+              style={{ padding: '0.35rem 0.5rem', fontSize: '0.875rem' }} 
+            />
+          </div>
+
+          <div style={{ width: '140px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>End Date</label>
+            <input 
+              type="date" 
+              value={logEndDate} 
+              onChange={e => setLogEndDate(e.target.value)} 
+              className="login-input" 
+              style={{ padding: '0.35rem 0.5rem', fontSize: '0.875rem' }} 
+            />
+          </div>
+
+          <button 
+            onClick={() => { 
+              setLogStartDate(''); 
+              setLogEndDate(''); 
+              setLogShiftFilter('all'); 
+              setLogDocFilter(''); 
+              setLogSubmittedByFilter(''); 
+              setLogDescFilter(''); 
+              setLogActivityTypeFilter('all'); 
+              setLogLineFilter(''); 
+              setLogSubLineFilter(''); 
+              setLogComponentFilter(''); 
+              setLogFreqFilter('all'); 
+              setLogStatusFilter('all');
+            }}
+            style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}
+          >
+            Reset Filters
+          </button>
+        </div>
+      )}
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem', textAlign: 'left' }}>
             <thead style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
               <tr>
-                <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Location / Issue</th>
+                {activeTab !== 'submission_logs' && (
+                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Location / Issue</th>
+                )}
                 
                 {activeTab === 'allocated_by_me' && (
                   <>
@@ -387,131 +671,172 @@ const SupportInbox = () => {
                     <th style={{ padding: '0.75rem 1rem', fontWeight: 600, minWidth: '250px' }}>Admin Action</th>
                   </>
                 )}
+
+                {activeTab === 'submission_logs' && (
+                  <>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Date</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Shift</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Type of Activity</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Component</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Description</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Doc No / Rev</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Status</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Submitted By</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Time</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
-              {inbox.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>No support requests found.</td>
-                </tr>
-              ) : inbox.map((req) => {
-                const statusStyle = getStatusStyle(req.status === 'Open' && activeTab === 'allocated_to_me' ? 'Pending' : req.status);
-                
-                return (
-                  <tr key={req.id} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: req.isCritical ? '#FEF2F2' : 'transparent' }}>
-                    
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{req.location}</div>
-                      <div style={{ color: 'var(--text-secondary)' }}>{req.component || '-'} • {req.remark || req.activityDescription}</div>
-                      {req.isCritical && <div style={{ fontSize: '0.7rem', color: '#DC2626', fontWeight: 700, marginTop: '0.2rem' }}>⚠️ CRITICAL ESCALATION</div>}
-                    </td>
-
-                    {activeTab === 'allocated_by_me' && (
-                      <>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          <div style={{ fontWeight: 600 }}>{req.assignedTo || 'Unassigned'}</div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{req.department}</div>
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>
-                          {new Date(req.timestamp).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, backgroundColor: statusStyle.bg, color: statusStyle.color, border: `1px solid ${statusStyle.border}`, display: 'inline-flex', alignItems: 'center', gap: '0.2rem', whiteSpace: 'nowrap' }}>
-                            {req.status}
-                          </span>
-                        </td>
-                      </>
-                    )}
-
-                    {activeTab === 'allocated_to_me' && (
-                      <>
-                        <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>{req.submittedBy}</td>
-                        <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>
-                          {new Date(req.timestamp).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem', color: req.status === 'Resolved' ? '#059669' : '#D97706', fontWeight: 600 }}>
-                          {getDuration(req.timestamp, req.resolvedAt)}
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, backgroundColor: statusStyle.bg, color: statusStyle.color, border: `1px solid ${statusStyle.border}`, display: 'inline-flex', alignItems: 'center', gap: '0.2rem', whiteSpace: 'nowrap' }}>
-                            {req.status === 'Open' ? 'Pending' : req.status}
-                          </span>
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          {req.status !== 'Resolved' && req.status !== 'Critical' && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                              <div style={{ display: 'flex', gap: '0.3rem' }}>
-                                <select 
-                                  value={userAction[req.id] || ''} 
-                                  onChange={e => setUserAction(prev => ({...prev, [req.id]: e.target.value}))}
-                                  className="select-input" 
-                                  style={{ flex: 1, padding: '0.3rem', fontSize: '0.75rem' }}
-                                >
-                                  <option value="">Update Status...</option>
-                                  <option value="Done">Done</option>
-                                  <option value="Hold">Hold</option>
-                                  <option value="Support Required">Support Required</option>
-                                  <option value="Postpone">Postpone</option>
-                                </select>
-                                
-                                {userAction[req.id] === 'Done' && (
-                                  <>
-                                    <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} ref={el => photoInputRefs.current[req.id] = el} onChange={e => handlePhotoCapture(req.id, e.target.files[0])} />
-                                    <button onClick={() => photoInputRefs.current[req.id]?.click()} title="Attach Photo" style={{ background: photos[req.id] ? '#ECFDF5' : '#F8FAFC', border: `1px solid ${photos[req.id] ? '#6EE7B7' : 'var(--border-color)'}`, borderRadius: '6px', padding: '0.3rem', cursor: 'pointer', display: 'flex', alignItems: 'center', color: photos[req.id] ? '#059669' : 'var(--text-tertiary)' }}>
-                                      <Camera size={14} />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                              <div style={{ display: 'flex', gap: '0.3rem' }}>
-                                <input type="text" placeholder="Remarks..." value={userReply[req.id] || ''} onChange={e => setUserReply({ ...userReply, [req.id]: e.target.value })} style={{ flex: 1, padding: '0.3rem', fontSize: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px' }} />
-                                <button onClick={() => handleUserUpdate(req.id, userAction[req.id])} className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem', backgroundColor: '#059669', color: '#fff', border: 'none' }}>Save</button>
-                              </div>
-                            </div>
-                          )}
-                          {req.status === 'Critical' && <span style={{ fontSize: '0.75rem', color: '#DC2626' }}>Locked - Requires Admin</span>}
-                        </td>
-                      </>
-                    )}
-
-                    {activeTab === 'all' && (
-                      <>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          <div style={{ fontWeight: 600 }}>{req.submittedBy}</div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>to {req.assignedTo || 'Unassigned'}</div>
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>
-                          {new Date(req.timestamp).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem', color: req.status === 'Resolved' ? '#059669' : '#D97706', fontWeight: 600 }}>
-                          {getDuration(req.timestamp, req.resolvedAt)}
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, backgroundColor: statusStyle.bg, color: statusStyle.color, border: `1px solid ${statusStyle.border}`, display: 'inline-flex', alignItems: 'center', gap: '0.2rem', whiteSpace: 'nowrap' }}>
-                            {req.status}
-                          </span>
-                          <div style={{ marginTop: '0.3rem', display: 'flex', gap: '0.2rem' }}>
-                            {req.supportCount > 0 && <span style={{ fontSize: '0.65rem', backgroundColor: '#FEF2F2', color: '#DC2626', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>Sup x{req.supportCount}</span>}
-                            {req.postponeCount > 0 && <span style={{ fontSize: '0.65rem', backgroundColor: '#F5F3FF', color: '#8B5CF6', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>Pos x{req.postponeCount}</span>}
-                          </div>
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          {req.status !== 'Resolved' && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                              <input type="text" placeholder="Admin note/Discard reason..." value={adminReply[req.id] || ''} onChange={e => setAdminReply({ ...adminReply, [req.id]: e.target.value })} style={{ width: '100%', padding: '0.3rem', fontSize: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box' }} />
-                              <div style={{ display: 'flex', gap: '0.3rem' }}>
-                                <button onClick={() => handleResolve(req.id)} className="btn btn-primary" style={{ flex: 1, padding: '0.2rem', fontSize: '0.7rem', backgroundColor: '#059669', borderColor: '#059669' }}>{req.isCritical ? 'Resolve Escalation' : 'Resolve'}</button>
-                                {req.status === 'Open' && <button onClick={() => handleAdminJobAllocate(req.id)} className="btn btn-secondary" style={{ padding: '0.2rem', fontSize: '0.7rem' }}>Allocate</button>}
-                              </div>
-                            </div>
-                          )}
-                        </td>
-                      </>
-                    )}
-
+              {activeTab === 'submission_logs' ? (
+                filteredSubmissions.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>No submission logs found.</td>
                   </tr>
-                );
-              })}
+                ) : (
+                  filteredSubmissions.map((sub, i) => {
+                    const getStatusColor = (s) => ({ 'Pending': '#94A3B8', 'Done': '#10B981', 'WIP': '#F59E0B', 'Hold': '#64748B', 'Postponed': '#8B5CF6', 'Support Required': '#EF4444' }[s] || '#94A3B8');
+                    return (
+                      <tr key={sub.id || i} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'transparent' }}>
+                        <td style={{ padding: '0.75rem 1rem' }}>{sub.Date || '-'}</td>
+                        <td style={{ padding: '0.75rem 1rem' }}>{sub.Shift || 'Gen'}</td>
+                        <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--primary-dark)' }}>{sub.Type_of_Activity || '-'}</td>
+                        <td style={{ padding: '0.75rem 1rem' }}>{sub.Component || '-'}</td>
+                        <td style={{ padding: '0.75rem 1rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal' }}>{sub.Activity_Description || '-'}</td>
+                        <td style={{ padding: '0.75rem 1rem', color: 'var(--text-tertiary)' }}>{sub.Document_Number || '-'} / R{sub.Revision || '-'}</td>
+                        <td style={{ padding: '0.75rem 1rem' }}>
+                          <span style={{ backgroundColor: getStatusColor(sub.Status), color: '#FFF', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600 }}>{sub.Status || 'Done'}</span>
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem' }}>{sub.Submitted_By || '-'}</td>
+                        <td style={{ padding: '0.75rem 1rem', color: 'var(--text-tertiary)' }}>{sub.Date_Timestamp ? new Date(sub.Date_Timestamp).toLocaleTimeString() : '-'}</td>
+                      </tr>
+                    );
+                  })
+                )
+              ) : (
+                inbox.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>No support requests found.</td>
+                  </tr>
+                ) : inbox.map((req) => {
+                  const statusStyle = getStatusStyle(req.status === 'Open' && activeTab === 'allocated_to_me' ? 'Pending' : req.status);
+                  
+                  return (
+                    <tr key={req.id} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: req.isCritical ? '#FEF2F2' : 'transparent' }}>
+                      
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{req.location}</div>
+                        <div style={{ color: 'var(--text-secondary)' }}>{req.component || '-'} • {req.remark || req.activityDescription}</div>
+                        {req.isCritical && <div style={{ fontSize: '0.7rem', color: '#DC2626', fontWeight: 700, marginTop: '0.2rem' }}>⚠️ CRITICAL ESCALATION</div>}
+                      </td>
+
+                      {activeTab === 'allocated_by_me' && (
+                        <>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <div style={{ fontWeight: 600 }}>{req.assignedTo || 'Unassigned'}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{req.department}</div>
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>
+                            {new Date(req.timestamp).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, backgroundColor: statusStyle.bg, color: statusStyle.color, border: `1px solid ${statusStyle.border}`, display: 'inline-flex', alignItems: 'center', gap: '0.2rem', whiteSpace: 'nowrap' }}>
+                              {req.status}
+                            </span>
+                          </td>
+                        </>
+                      )}
+
+                      {activeTab === 'allocated_to_me' && (
+                        <>
+                          <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>{req.submittedBy}</td>
+                          <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>
+                            {new Date(req.timestamp).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', color: req.status === 'Resolved' ? '#059669' : '#D97706', fontWeight: 600 }}>
+                            {getDuration(req.timestamp, req.resolvedAt)}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, backgroundColor: statusStyle.bg, color: statusStyle.color, border: `1px solid ${statusStyle.border}`, display: 'inline-flex', alignItems: 'center', gap: '0.2rem', whiteSpace: 'nowrap' }}>
+                              {req.status === 'Open' ? 'Pending' : req.status}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            {req.status !== 'Resolved' && req.status !== 'Critical' && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                <div style={{ display: 'flex', gap: '0.3rem' }}>
+                                  <select 
+                                    value={userAction[req.id] || ''} 
+                                    onChange={e => setUserAction(prev => ({...prev, [req.id]: e.target.value}))}
+                                    className="select-input" 
+                                    style={{ flex: 1, padding: '0.3rem', fontSize: '0.75rem' }}
+                                  >
+                                    <option value="">Update Status...</option>
+                                    <option value="Done">Done</option>
+                                    <option value="Hold">Hold</option>
+                                    <option value="Support Required">Support Required</option>
+                                    <option value="Postpone">Postpone</option>
+                                  </select>
+                                  
+                                  {userAction[req.id] === 'Done' && (
+                                    <>
+                                      <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} ref={el => photoInputRefs.current[req.id] = el} onChange={e => handlePhotoCapture(req.id, e.target.files[0])} />
+                                      <button onClick={() => photoInputRefs.current[req.id]?.click()} title="Attach Photo" style={{ background: photos[req.id] ? '#ECFDF5' : '#F8FAFC', border: `1px solid ${photos[req.id] ? '#6EE7B7' : 'var(--border-color)'}`, borderRadius: '6px', padding: '0.3rem', cursor: 'pointer', display: 'flex', alignItems: 'center', color: photos[req.id] ? '#059669' : 'var(--text-tertiary)' }}>
+                                        <Camera size={14} />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.3rem' }}>
+                                  <input type="text" placeholder="Remarks..." value={userReply[req.id] || ''} onChange={e => setUserReply({ ...userReply, [req.id]: e.target.value })} style={{ flex: 1, padding: '0.3rem', fontSize: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px' }} />
+                                  <button onClick={() => handleUserUpdate(req.id, userAction[req.id])} className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem', backgroundColor: '#059669', color: '#fff', border: 'none' }}>Save</button>
+                                </div>
+                              </div>
+                            )}
+                            {req.status === 'Critical' && <span style={{ fontSize: '0.75rem', color: '#DC2626' }}>Locked - Requires Admin</span>}
+                          </td>
+                        </>
+                      )}
+
+                      {activeTab === 'all' && (
+                        <>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <div style={{ fontWeight: 600 }}>{req.submittedBy}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>to {req.assignedTo || 'Unassigned'}</div>
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>
+                            {new Date(req.timestamp).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', color: req.status === 'Resolved' ? '#059669' : '#D97706', fontWeight: 600 }}>
+                            {getDuration(req.timestamp, req.resolvedAt)}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, backgroundColor: statusStyle.bg, color: statusStyle.color, border: `1px solid ${statusStyle.border}`, display: 'inline-flex', alignItems: 'center', gap: '0.2rem', whiteSpace: 'nowrap' }}>
+                              {req.status}
+                            </span>
+                            <div style={{ marginTop: '0.3rem', display: 'flex', gap: '0.2rem' }}>
+                              {req.supportCount > 0 && <span style={{ fontSize: '0.65rem', backgroundColor: '#FEF2F2', color: '#DC2626', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>Sup x{req.supportCount}</span>}
+                              {req.postponeCount > 0 && <span style={{ fontSize: '0.65rem', backgroundColor: '#F5F3FF', color: '#8B5CF6', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>Pos x{req.postponeCount}</span>}
+                            </div>
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            {req.status !== 'Resolved' && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                <input type="text" placeholder="Admin note/Discard reason..." value={adminReply[req.id] || ''} onChange={e => setAdminReply({ ...adminReply, [req.id]: e.target.value })} style={{ width: '100%', padding: '0.3rem', fontSize: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box' }} />
+                                <div style={{ display: 'flex', gap: '0.3rem' }}>
+                                  <button onClick={() => handleResolve(req.id)} className="btn btn-primary" style={{ flex: 1, padding: '0.2rem', fontSize: '0.7rem', backgroundColor: '#059669', borderColor: '#059669' }}>{req.isCritical ? 'Resolve Escalation' : 'Resolve'}</button>
+                                  {req.status === 'Open' && <button onClick={() => handleAdminJobAllocate(req.id)} className="btn btn-secondary" style={{ padding: '0.2rem', fontSize: '0.7rem' }}>Allocate</button>}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                        </>
+                      )}
+
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

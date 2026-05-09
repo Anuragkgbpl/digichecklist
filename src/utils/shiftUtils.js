@@ -93,3 +93,64 @@ export const validateChecklistTiming = (frequency, employeeShift, shiftMaster) =
   // Weekly, Monthly, etc. — no time restriction
   return { valid: true, message: '' };
 };
+
+/**
+ * Calculates the start and end of the current Daily cycle.
+ * By default, the Daily cycle starts at the start time of Shift A (usually 06:00 AM).
+ */
+export const getCurrentDailyCycleRange = (shiftMaster) => {
+  const now = new Date();
+  const shiftAStart = shiftMaster['A']?.start || '06:00';
+  const [startH, startM] = shiftAStart.split(':').map(Number);
+  
+  const cycleStart = new Date(now);
+  cycleStart.setHours(startH, startM, 0, 0);
+  
+  if (now < cycleStart) {
+    cycleStart.setDate(cycleStart.getDate() - 1);
+  }
+  
+  const cycleEnd = new Date(cycleStart);
+  cycleEnd.setDate(cycleEnd.getDate() + 1);
+  
+  return { start: cycleStart, end: cycleEnd };
+};
+
+/**
+ * Calculates the start and end of the current or most recent occurrence of a given Shift.
+ * Handles normal shifts and midnight-crossover shifts (e.g., 22:00 - 06:00).
+ */
+export const getShiftRange = (shiftId, shiftMaster) => {
+  const shift = shiftMaster[shiftId];
+  if (!shift) return null;
+  const now = new Date();
+  
+  const startStr = shift.start;
+  const endStr = shift.end;
+  
+  const [startH, startM] = startStr.split(':').map(Number);
+  const [endH, endM] = endStr.split(':').map(Number);
+  
+  const sDate = new Date(now);
+  sDate.setHours(startH, startM, 0, 0);
+  
+  const eDate = new Date(now);
+  eDate.setHours(endH, endM, 0, 0);
+  
+  if (startH <= endH) {
+    // Normal shift (e.g. 06:00 to 14:00)
+    if (now < sDate) {
+      sDate.setDate(sDate.getDate() - 1);
+      eDate.setDate(eDate.getDate() - 1);
+    }
+  } else {
+    // Midnight crossover (e.g. 22:00 to 06:00)
+    if (now >= sDate) {
+      eDate.setDate(eDate.getDate() + 1);
+    } else {
+      sDate.setDate(sDate.getDate() - 1);
+    }
+  }
+  return { start: sDate, end: eDate };
+};
+
