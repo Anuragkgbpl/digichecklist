@@ -637,7 +637,7 @@ const Dashboard = () => {
           ======================================================== */}
       {activeTab === 'shift' && (
         <div style={{ display: 'grid', gap: '1.5rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
             {/* Shift Performance Grid Table */}
             <div className="card" style={{ marginBottom: 0 }}>
               <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
@@ -695,7 +695,7 @@ const Dashboard = () => {
           ======================================================== */}
       {activeTab === 'time' && (
         <div style={{ display: 'grid', gap: '1.5rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
             {/* Peak hours area chart */}
             <div className="card" style={{ marginBottom: 0 }}>
               <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
@@ -764,7 +764,7 @@ const Dashboard = () => {
           ======================================================== */}
       {activeTab === 'workforce' && (
         <div style={{ display: 'grid', gap: '1.5rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
             {/* Workforce Leaderboard */}
             <div className="card" style={{ marginBottom: 0 }}>
               <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
@@ -833,7 +833,7 @@ const Dashboard = () => {
           </div>
 
           {/* Fastest and Slowest Responders (TAT) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
             <div className="card" style={{ marginBottom: 0 }}>
               <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10B981', fontWeight: 700 }}>
                 <Clock size={18} color="#10B981" /> Fastest Responders (TAT)
@@ -901,7 +901,7 @@ const Dashboard = () => {
           </div>
 
           {/* Compliance Areas Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
             <div className="card" style={{ marginBottom: 0 }}>
               <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10B981', fontWeight: 700 }}>
                 <CheckCircle size={18} color="#10B981" /> Highest Compliance Areas
@@ -936,7 +936,7 @@ const Dashboard = () => {
           </div>
 
           {/* Support Departments Performance Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
             <div className="card" style={{ marginBottom: 0 }}>
               <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10B981', fontWeight: 700 }}>
                 <Award size={18} color="#10B981" /> Top Performing Departments
@@ -970,7 +970,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
             {/* Activity Type distribution Pie */}
             <div className="card" style={{ marginBottom: 0 }}>
               <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
@@ -1046,7 +1046,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
             {/* Failure Prediction Box */}
             <div className="card" style={{ marginBottom: 0, border: '1px solid #FCA5A5' }}>
               <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#B91C1C', fontWeight: 700 }}>
