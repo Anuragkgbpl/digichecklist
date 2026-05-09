@@ -152,19 +152,7 @@ const Dashboard = () => {
   const stackedStatusTrend = useMemo(() => {
     const dates = [...new Set(filteredData.map(r => r.Date).filter(Boolean))].sort().slice(-7);
     if (dates.length === 0) {
-      const last7Days = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (6 - i));
-        return d.toISOString().split('T')[0];
-      });
-      return last7Days.map(date => ({
-        date,
-        Done: 12 + (Math.round(Math.random() * 5)),
-        WIP: 2 + (Math.round(Math.random() * 3)),
-        Hold: 1,
-        Support: 1,
-        Pending: 3
-      }));
+      return [];
     }
     return dates.map(date => {
       const dayLogs = filteredData.filter(r => r.Date === date);
@@ -278,21 +266,9 @@ const Dashboard = () => {
       };
     }).sort((a, b) => a.avgHrs - b.avgHrs); // Fastest first
 
-    // Fallback if empty to keep the dashboard visual premium
-    const fallbackTop = [
-      { name: 'Anurag Shukla', dept: 'Electrical', avgHrs: 0.2, avgFormatted: '12m', count: 5 },
-      { name: 'Vikram Singh', dept: 'Mechanical', avgHrs: 0.4, avgFormatted: '24m', count: 4 },
-      { name: 'Sanjay Dutt', dept: 'Instrumentation', avgHrs: 0.6, avgFormatted: '36m', count: 6 }
-    ];
-    const fallbackWorst = [
-      { name: 'Rohan Sharma', dept: 'Utility', avgHrs: 4.2, avgFormatted: '4.2h', count: 3 },
-      { name: 'Amit Verma', dept: 'Civil', avgHrs: 3.5, avgFormatted: '3.5h', count: 2 },
-      { name: 'Vijay Yadav', dept: 'Production', avgHrs: 2.8, avgFormatted: '2.8h', count: 3 }
-    ];
-
     return {
-      top: list.length > 0 ? list.slice(0, 5) : fallbackTop,
-      worst: list.length > 0 ? list.slice(-5).reverse() : fallbackWorst
+      top: list.slice(0, 5),
+      worst: list.slice(-5).reverse()
     };
   }, [supportInbox]);
 
@@ -370,36 +346,6 @@ const Dashboard = () => {
       .map(([name, stats]) => ({ name, compliance: Math.round((stats.done / stats.total) * 100) }))
       .sort((a, b) => a.compliance - b.compliance)
       .slice(0, 5);
-
-    // Premium fallbacks if empty
-    if (highestComplianceAreas.length === 0 || highestComplianceAreas.every(a => a.compliance === 0)) {
-      highestComplianceAreas = [
-        { name: 'Line 1 > Conveyor A', compliance: 95, total: 20 },
-        { name: 'Line 2 > Packer B', compliance: 90, total: 15 },
-        { name: 'Line 3 > Filler C', compliance: 88, total: 25 }
-      ];
-    }
-    if (lowestComplianceAreas.length === 0 || lowestComplianceAreas.every(a => a.compliance === 0)) {
-      lowestComplianceAreas = [
-        { name: 'Line 4 > Sealer D', compliance: 45, total: 12 },
-        { name: 'Line 1 > Pump E', compliance: 55, total: 10 },
-        { name: 'Line 2 > Motor F', compliance: 60, total: 8 }
-      ];
-    }
-    if (topPerformingDepts.length === 0) {
-      topPerformingDepts = [
-        { name: 'Electrical Maintenance', compliance: 94 },
-        { name: 'Instrumentation', compliance: 90 },
-        { name: 'Safety Audit', compliance: 88 }
-      ];
-    }
-    if (worstPerformingDepts.length === 0) {
-      worstPerformingDepts = [
-        { name: 'Utility Maintenance', compliance: 42 },
-        { name: 'Civil Maintenance', compliance: 50 },
-        { name: 'Mechanical Lubrication', compliance: 58 }
-      ];
-    }
 
     return {
       frequencyDistribution,
@@ -839,7 +785,11 @@ const Dashboard = () => {
                 <Clock size={18} color="#10B981" /> Fastest Responders (TAT)
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {tatPerformance.top.map((item, i) => (
+                {tatPerformance.top.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
+                    No support tickets resolved yet
+                  </div>
+                ) : tatPerformance.top.map((item, i) => (
                   <div key={i} style={{ padding: '0.75rem 1rem', backgroundColor: '#ECFDF5', borderRadius: '10px', border: '1px solid #A7F3D0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <strong style={{ fontSize: '0.85rem', color: '#047857' }}>{item.name}</strong>
@@ -858,7 +808,11 @@ const Dashboard = () => {
                 <Clock size={18} color="#EF4444" /> Slowest Responders (TAT)
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {tatPerformance.worst.map((item, i) => (
+                {tatPerformance.worst.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
+                    No support tickets resolved yet
+                  </div>
+                ) : tatPerformance.worst.map((item, i) => (
                   <div key={i} style={{ padding: '0.75rem 1rem', backgroundColor: '#FEF2F2', borderRadius: '10px', border: '1px solid #FCA5A5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <strong style={{ fontSize: '0.85rem', color: '#B91C1C' }}>{item.name}</strong>
@@ -907,7 +861,11 @@ const Dashboard = () => {
                 <CheckCircle size={18} color="#10B981" /> Highest Compliance Areas
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {activityAndAudit.highestComplianceAreas.map((item, i) => (
+                {activityAndAudit.highestComplianceAreas.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
+                    No compliance data found
+                  </div>
+                ) : activityAndAudit.highestComplianceAreas.map((item, i) => (
                   <div key={i} style={{ padding: '0.75rem 1rem', backgroundColor: '#ECFDF5', borderRadius: '10px', border: '1px solid #A7F3D0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#047857' }}>{item.name}</span>
                     <span style={{ backgroundColor: '#D1FAE5', color: '#047857', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 800 }}>
@@ -923,7 +881,11 @@ const Dashboard = () => {
                 <AlertTriangle size={18} color="#EF4444" /> Lowest Compliance Areas
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {activityAndAudit.lowestComplianceAreas.map((item, i) => (
+                {activityAndAudit.lowestComplianceAreas.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
+                    No compliance data found
+                  </div>
+                ) : activityAndAudit.lowestComplianceAreas.map((item, i) => (
                   <div key={i} style={{ padding: '0.75rem 1rem', backgroundColor: '#FEF2F2', borderRadius: '10px', border: '1px solid #FCA5A5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#B91C1C' }}>{item.name}</span>
                     <span style={{ backgroundColor: '#FEE2E2', color: '#B91C1C', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 800 }}>
@@ -942,7 +904,11 @@ const Dashboard = () => {
                 <Award size={18} color="#10B981" /> Top Performing Departments
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {activityAndAudit.topPerformingDepts.map((item, i) => (
+                {activityAndAudit.topPerformingDepts.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
+                    No department compliance data found
+                  </div>
+                ) : activityAndAudit.topPerformingDepts.map((item, i) => (
                   <div key={i} style={{ padding: '0.75rem 1rem', backgroundColor: '#ECFDF5', borderRadius: '10px', border: '1px solid #A7F3D0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#047857' }}>{item.name}</span>
                     <span style={{ backgroundColor: '#D1FAE5', color: '#047857', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 800 }}>
@@ -958,7 +924,11 @@ const Dashboard = () => {
                 <AlertTriangle size={18} color="#EF4444" /> Worst Performing Departments
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {activityAndAudit.worstPerformingDepts.map((item, i) => (
+                {activityAndAudit.worstPerformingDepts.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
+                    No department compliance data found
+                  </div>
+                ) : activityAndAudit.worstPerformingDepts.map((item, i) => (
                   <div key={i} style={{ padding: '0.75rem 1rem', backgroundColor: '#FEF2F2', borderRadius: '10px', border: '1px solid #FCA5A5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#B91C1C' }}>{item.name}</span>
                     <span style={{ backgroundColor: '#FEE2E2', color: '#B91C1C', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 800 }}>
