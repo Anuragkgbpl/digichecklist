@@ -1173,7 +1173,7 @@ const Dashboard = () => {
           ======================================================= */}
       {activeTab === 'aging' && (
         <div style={{ display: 'grid', gap: '1.5rem' }}>
-          <div style={{ background: 'linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%)', border: 'none', padding: '1.5rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#FFFFFF' }}>
+          <div style={{ background: 'linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%)', border: 'none', padding: '1.5rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#FFFFFF', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
               <h3 style={{ margin: 0, color: '#FFFFFF', fontWeight: 800 }}>⚠️ Heavy Activity Aging Command Tower</h3>
             </div>
@@ -1240,7 +1240,7 @@ const Dashboard = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', fontWeight: 800 }}><Activity color="#EF4444" /> Long-Tail Aging Decomposition Matrix</h3>
             </div>
-            <div style={{ overflowX: 'auto' }}>
+            <div className="table-container-responsive">
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '2px solid #E2E8F0' }}>

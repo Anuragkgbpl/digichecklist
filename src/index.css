@@ -287,3 +287,20 @@ button {
     page-break-inside: avoid !important;
   }
 }
+/* Responsive Tables Utility */
+.table-container-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+}
+
+.table-container-responsive table {
+  min-width: 800px; /* Prevents squishing columns too small */
+}
+
+@media (max-width: 640px) {
+  .table-container-responsive table {
+    min-width: 900px; /* Ensure ample width for deep column tables like Aging */
+  }
+}

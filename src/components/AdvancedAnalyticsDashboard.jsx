@@ -228,7 +228,7 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
           <div style={{ ...cardHeaderStyle, border: 'none', padding: 0, marginBottom: '1rem' }}>
             <Layers size={18} color="#6366F1" /> Activity-Wise Realization & Detailed Backlog 
           </div>
-          <div style={{ overflowX: 'auto' }}>
+          <div className="table-container-responsive">
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
               <thead>
                 <tr style={{ backgroundColor: '#F8FAFC', color: '#475569' }}>
