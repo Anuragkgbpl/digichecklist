@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
   TrendingUp, Clock, CheckCircle, AlertTriangle, ShieldCheck, Users, 
   Layers, Activity, FileClock, Search, Calendar, Zap, Map, Settings 
@@ -17,6 +17,13 @@ const STATUS_COLORS = { Done: '#10B981', WIP: '#3B82F6', Hold: '#F59E0B', Overdu
 const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] }) => {
   const { submissions: rawAllSub = [], checklists: rawAllCheck = [], shifts = [] } = useData();
   const [trendPivot, setTrendPivot] = useState('shift');
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Use props passed from filtered parent dashboard, fallback safely
   const submissions = preFilteredData.length > 0 ? preFilteredData : rawAllSub;
@@ -228,46 +235,73 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
           <div style={{ ...cardHeaderStyle, border: 'none', padding: 0, marginBottom: '1rem' }}>
             <Layers size={18} color="#6366F1" /> Activity-Wise Realization & Detailed Backlog 
           </div>
-          <div className="table-container-responsive">
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#F8FAFC', color: '#475569' }}>
-                  <th style={{ padding: '0.6rem 1rem', borderRadius: '6px 0 0 6px' }}>Activity Type</th>
-                  <th style={{ padding: '0.6rem', textAlign: 'center' }}>Allocated (Baseline)</th>
-                  <th style={{ padding: '0.6rem', textAlign: 'center', color: '#10B981' }}>Completed</th>
-                  <th style={{ padding: '0.6rem', textAlign: 'center', color: '#3B82F6' }}>WIP</th>
-                  <th style={{ padding: '0.6rem', textAlign: 'center', color: '#F59E0B' }}>Hold</th>
-                  <th style={{ padding: '0.6rem', textAlign: 'center', color: '#EF4444' }}>Support Req.</th>
-                  <th style={{ padding: '0.6rem', textAlign: 'center', color: '#94A3B8' }}>Pending</th>
-                  <th style={{ padding: '0.6rem 1rem', textAlign: 'right', borderRadius: '0 6px 6px 0' }}>Effort Share</th>
-                </tr>
-              </thead>
-              <tbody>
-                {coreStats.activityDetailGrid.map(row => {
-                  const completedRate = Math.min(100, row.allocated > 0 ? Math.round((row.done / row.allocated) * 100) : 0);
-                  return (
-                    <tr key={row.name} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#334155' }}>{row.name}</td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600 }}>{row.allocated}</td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center' }}><span style={{ background: '#DCFCE7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 700 }}>{row.done}</span></td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center', color: row.wip > 0 ? '#2563EB' : '#CBD5E1', fontWeight: row.wip > 0 ? 700 : 400 }}>{row.wip || '-'}</td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center', color: row.hold > 0 ? '#D97706' : '#CBD5E1', fontWeight: row.hold > 0 ? 700 : 400 }}>{row.hold || '-'}</td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center', color: row.support > 0 ? '#DC2626' : '#CBD5E1', fontWeight: row.support > 0 ? 700 : 400 }}>{row.support || '-'}</td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center', color: '#64748B' }}>{row.pending || '-'}</td>
-                      <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                          <div style={{ width: '60px', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div style={{ width: `${completedRate}%`, height: '100%', backgroundColor: '#6366F1' }} />
+          {isMobile ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {coreStats.activityDetailGrid.map(row => {
+                const completedRate = Math.min(100, row.allocated > 0 ? Math.round((row.done / row.allocated) * 100) : 0);
+                return (
+                  <div key={row.name} style={{ border: '1px solid #E2E8F0', borderRadius: '10px', padding: '0.85rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#334155' }}>{row.name}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 800 }}>{completedRate}% Done</span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.75rem' }}>
+                      <div style={{ width: `${completedRate}%`, height: '100%', backgroundColor: '#6366F1' }} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700 }}>
+                      <div style={{ background: '#F8FAFC', padding: '0.4rem', borderRadius: '6px' }}><div style={{color: '#64748B', fontSize: '0.6rem'}}>Alloc</div>{row.allocated}</div>
+                      <div style={{ background: '#DCFCE7', color: '#166534', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Done</div>{row.done}</div>
+                      <div style={{ background: '#EFF6FF', color: '#2563EB', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>WIP</div>{row.wip || '-'}</div>
+                      <div style={{ background: '#FFFBEB', color: '#D97706', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Hold</div>{row.hold || '-'}</div>
+                      <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Support</div>{row.support || '-'}</div>
+                      <div style={{ background: '#F8FAFC', color: '#64748B', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Pend</div>{row.pending || '-'}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="table-container-responsive">
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F8FAFC', color: '#475569' }}>
+                    <th style={{ padding: '0.6rem 1rem', borderRadius: '6px 0 0 6px' }}>Activity Type</th>
+                    <th style={{ padding: '0.6rem', textAlign: 'center' }}>Allocated (Baseline)</th>
+                    <th style={{ padding: '0.6rem', textAlign: 'center', color: '#10B981' }}>Completed</th>
+                    <th style={{ padding: '0.6rem', textAlign: 'center', color: '#3B82F6' }}>WIP</th>
+                    <th style={{ padding: '0.6rem', textAlign: 'center', color: '#F59E0B' }}>Hold</th>
+                    <th style={{ padding: '0.6rem', textAlign: 'center', color: '#EF4444' }}>Support Req.</th>
+                    <th style={{ padding: '0.6rem', textAlign: 'center', color: '#94A3B8' }}>Pending</th>
+                    <th style={{ padding: '0.6rem 1rem', textAlign: 'right', borderRadius: '0 6px 6px 0' }}>Effort Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {coreStats.activityDetailGrid.map(row => {
+                    const completedRate = Math.min(100, row.allocated > 0 ? Math.round((row.done / row.allocated) * 100) : 0);
+                    return (
+                      <tr key={row.name} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#334155' }}>{row.name}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600 }}>{row.allocated}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center' }}><span style={{ background: '#DCFCE7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 700 }}>{row.done}</span></td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center', color: row.wip > 0 ? '#2563EB' : '#CBD5E1', fontWeight: row.wip > 0 ? 700 : 400 }}>{row.wip || '-'}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center', color: row.hold > 0 ? '#D97706' : '#CBD5E1', fontWeight: row.hold > 0 ? 700 : 400 }}>{row.hold || '-'}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center', color: row.support > 0 ? '#DC2626' : '#CBD5E1', fontWeight: row.support > 0 ? 700 : 400 }}>{row.support || '-'}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center', color: '#64748B' }}>{row.pending || '-'}</td>
+                        <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                            <div style={{ width: '60px', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{ width: `${completedRate}%`, height: '100%', backgroundColor: '#6366F1' }} />
+                            </div>
+                            <span style={{ fontSize: '0.7rem', color: '#64748B', width: '30px' }}>{completedRate}%</span>
                           </div>
-                          <span style={{ fontSize: '0.7rem', color: '#64748B', width: '30px' }}>{completedRate}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 

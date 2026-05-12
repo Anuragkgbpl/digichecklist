@@ -21,6 +21,13 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('realtime');
   const [showFilters, setShowFilters] = useState(false);
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  React.useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Filter States
   const [filters, setFilters] = useState({
     dateStart: '',
@@ -1240,71 +1247,113 @@ const Dashboard = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', fontWeight: 800 }}><Activity color="#EF4444" /> Long-Tail Aging Decomposition Matrix</h3>
             </div>
-            <div className="table-container-responsive">
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '2px solid #E2E8F0' }}>
-                    <th style={{ padding: '0.8rem 1rem' }}>Activity Hierarchy</th>
-                    <th style={{ padding: '0.8rem 1rem' }}>Origin Line</th>
-                    <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem', borderLeft: '1px solid #F1F5F9' }}>{'< 8 HR'}</th>
-                    <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'1-7 DAY'}</th>
-                    <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'8-30 DAY'}</th>
-                    <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'1-6 MO'}</th>
-                    <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem', color: '#DC2626' }}>{'> 6 MO'}</th>
-                    <th style={{ padding: '0.8rem 1rem', textAlign: 'right' }}>Action Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const map = {};
-                    rawData.filter(r => r.Status !== 'Done').forEach(r => {
-                      const key = `${r.Activity_Description || 'Unk'} @ ${r.Component || 'Unk'}`;
-                      if(!map[key]) map[key] = { desc: r.Activity_Description, comp: r.Component, freq: r.Frequency, line: r.Line_Equipment, type: r.Type_of_Activity, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 };
-                      
-                      const diffHrs = (new Date() - new Date(r.Date_Timestamp || r.Date)) / 36e5;
-                      if (diffHrs < 8) map[key].s1++;
-                      else if (diffHrs < 168) map[key].s2++; // 7 Days
-                      else if (diffHrs < 720) map[key].s3++; // 30 Days
-                      else if (diffHrs < 4320) map[key].s4++; // 6 Months
-                      else map[key].s5++; // >6 Months
-                    });
-                    const rows = Object.values(map).sort((a,b) => (b.s5*100 + b.s4*10 + b.s3) - (a.s5*100 + a.s4*10 + a.s3));
-                    
-                    if(rows.length === 0) return <tr><td colSpan="8" style={{ padding: '3rem', textAlign: 'center', color: '#94A3B8', fontSize: '0.9rem' }}>🎉 Operation Clean: Zero backlog items currently identified across all tracked components.</td></tr>;
-                    
-                    return rows.map((row, idx) => {
+            {(() => {
+              const map = {};
+              rawData.filter(r => r.Status !== 'Done').forEach(r => {
+                const key = `${r.Activity_Description || 'Unk'} @ ${r.Component || 'Unk'}`;
+                if(!map[key]) map[key] = { desc: r.Activity_Description, comp: r.Component, freq: r.Frequency, line: r.Line_Equipment, type: r.Type_of_Activity, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 };
+                const diffHrs = (new Date() - new Date(r.Date_Timestamp || r.Date)) / 36e5;
+                if (diffHrs < 8) map[key].s1++;
+                else if (diffHrs < 168) map[key].s2++; // 7 Days
+                else if (diffHrs < 720) map[key].s3++; // 30 Days
+                else if (diffHrs < 4320) map[key].s4++; // 6 Months
+                else map[key].s5++; // >6 Months
+              });
+              const rows = Object.values(map).sort((a,b) => (b.s5*100 + b.s4*10 + b.s3) - (a.s5*100 + a.s4*10 + a.s3));
+              
+              if (rows.length === 0) {
+                return <div style={{ padding: '3rem', textAlign: 'center', color: '#94A3B8', fontSize: '0.9rem' }}>🎉 Operation Clean: Zero backlog items currently identified across all tracked components.</div>;
+              }
+
+              // ===================================================
+              // MOBILE VIEW: STACKED RICHCARDS (No Horizontal Scroll)
+              // ===================================================
+              if (isMobile) {
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {rows.map((row, idx) => {
                       const isCritical = row.s4 > 0 || row.s5 > 0;
                       const isSevere = row.s3 > 0;
                       return (
-                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                          <td style={{ padding: '0.75rem 1rem' }}>
-                            <strong style={{ color: '#1E293B' }}>{row.comp}</strong>
-                            <div style={{ fontSize: '0.65rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{row.desc}</div>
-                          </td>
-                          <td style={{ padding: '0.75rem 1rem' }}>
-                            <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600 }}>{row.line}</span>
-                            <div style={{ fontSize: '0.65rem', color: '#94A3B8' }}>{row.type} • {row.freq}</div>
-                          </td>
-                          <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s1 ? '#64748B' : '#E2E8F0', fontWeight: row.s1 ? 700 : 400, borderLeft: '1px solid #F8FAFC' }}>{row.s1 || '-'}</td>
-                          <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s2 ? '#D97706' : '#E2E8F0', fontWeight: row.s2 ? 700 : 400 }}>{row.s2 || '-'}</td>
-                          <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s3 ? '#EA580C' : '#E2E8F0', fontWeight: row.s3 ? 800 : 400 }}>{row.s3 || '-'}</td>
-                          <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s4 ? '#DC2626' : '#E2E8F0', fontWeight: row.s4 ? 900 : 400, background: row.s4 ? '#FEF2F2' : 'transparent' }}>{row.s4 || '-'}</td>
-                          <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s5 ? '#991B1B' : '#E2E8F0', fontWeight: row.s5 ? 900 : 400, background: row.s5 ? '#FEE2E2' : 'transparent' }}>{row.s5 || '-'}</td>
-                          <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                        <div key={idx} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1rem', background: isCritical ? '#FEF2F2' : '#FFF' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1E293B' }}>{row.comp}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{row.line} • {row.type}</div>
+                            </div>
                             <span style={{ 
                               padding: '0.25rem 0.5rem', borderRadius: '6px', fontSize: '0.65rem', fontWeight: 800, color: '#FFF',
                               backgroundColor: isCritical ? '#991B1B' : isSevere ? '#EA580C' : row.s2 > 0 ? '#D97706' : '#10B981' 
-                            }}>
-                              {isCritical ? 'CRITICAL DEBT' : isSevere ? 'ELEVATED' : 'STABLE'}
-                            </span>
-                          </td>
-                        </tr>
+                            }}>{isCritical ? 'CRITICAL' : isSevere ? 'ELEVATED' : 'STABLE'}</span>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', backgroundColor: '#F8FAFC', padding: '0.75rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 700, textAlign: 'center' }}>
+                            <div><div style={{color: '#64748B', fontSize: '0.6rem'}}> < 8 HR</div>{row.s1 || '-'}</div>
+                            <div><div style={{color: '#D97706', fontSize: '0.6rem'}}>1-7 DAY</div>{row.s2 || '-'}</div>
+                            <div><div style={{color: '#EA580C', fontSize: '0.6rem'}}>8-30 DAY</div>{row.s3 || '-'}</div>
+                            <div><div style={{color: '#DC2626', fontSize: '0.6rem'}}>1-6 MO</div>{row.s4 || '-'}</div>
+                            <div><div style={{color: '#991B1B', fontSize: '0.6rem'}}>> 6 MO</div>{row.s5 || '-'}</div>
+                            <div><div style={{color: '#94A3B8', fontSize: '0.6rem'}}>FREQ</div>{row.freq}</div>
+                          </div>
+                        </div>
                       );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
+                    })}
+                  </div>
+                );
+              }
+
+              // ===================================================
+              // DESKTOP VIEW: STANDARD TABLE
+              // ===================================================
+              return (
+                <div className="table-container-responsive">
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '2px solid #E2E8F0' }}>
+                        <th style={{ padding: '0.8rem 1rem' }}>Activity Hierarchy</th>
+                        <th style={{ padding: '0.8rem 1rem' }}>Origin Line</th>
+                        <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem', borderLeft: '1px solid #F1F5F9' }}>{'< 8 HR'}</th>
+                        <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'1-7 DAY'}</th>
+                        <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'8-30 DAY'}</th>
+                        <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'1-6 MO'}</th>
+                        <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem', color: '#DC2626' }}>{'> 6 MO'}</th>
+                        <th style={{ padding: '0.8rem 1rem', textAlign: 'right' }}>Action Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, idx) => {
+                        const isCritical = row.s4 > 0 || row.s5 > 0;
+                        const isSevere = row.s3 > 0;
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <strong style={{ color: '#1E293B' }}>{row.comp}</strong>
+                              <div style={{ fontSize: '0.65rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{row.desc}</div>
+                            </td>
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600 }}>{row.line}</span>
+                              <div style={{ fontSize: '0.65rem', color: '#94A3B8' }}>{row.type} • {row.freq}</div>
+                            </td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s1 ? '#64748B' : '#E2E8F0', fontWeight: row.s1 ? 700 : 400, borderLeft: '1px solid #F8FAFC' }}>{row.s1 || '-'}</td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s2 ? '#D97706' : '#E2E8F0', fontWeight: row.s2 ? 700 : 400 }}>{row.s2 || '-'}</td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s3 ? '#EA580C' : '#E2E8F0', fontWeight: row.s3 ? 800 : 400 }}>{row.s3 || '-'}</td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s4 ? '#DC2626' : '#E2E8F0', fontWeight: row.s4 ? 900 : 400, background: row.s4 ? '#FEF2F2' : 'transparent' }}>{row.s4 || '-'}</td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s5 ? '#991B1B' : '#E2E8F0', fontWeight: row.s5 ? 900 : 400, background: row.s5 ? '#FEE2E2' : 'transparent' }}>{row.s5 || '-'}</td>
+                            <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                              <span style={{ 
+                                padding: '0.25rem 0.5rem', borderRadius: '6px', fontSize: '0.65rem', fontWeight: 800, color: '#FFF',
+                                backgroundColor: isCritical ? '#991B1B' : isSevere ? '#EA580C' : row.s2 > 0 ? '#D97706' : '#10B981' 
+                              }}>
+                                {isCritical ? 'CRITICAL DEBT' : isSevere ? 'ELEVATED' : 'STABLE'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
