@@ -1,11 +1,12 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Upload, FileText, CheckCircle2, XCircle, ClipboardList, Download, List, Trash2, Power, PowerOff, Search, X, Filter } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, XCircle, ClipboardList, Download, List, Trash2, Power, PowerOff, Search, X, Filter, Settings } from 'lucide-react';
+import FrequencyMaster from '../components/FrequencyMaster';
 import { parseCSV, validateChecklist } from '../utils/csvParser';
 import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
 
 const UploadChecklist = () => {
-  const { checklists, updateFirebase } = useData();
+  const { checklists, frequencies, updateFirebase } = useData();
   const [activeTab, setActiveTab] = useState('upload');
   const [file, setFile] = useState(null);
 
@@ -21,7 +22,13 @@ const UploadChecklist = () => {
   const lines = useMemo(() => [...new Set(checklists.map(c => c.Line_Equipment).filter(Boolean))], [checklists]);
   const subLines = useMemo(() => [...new Set(checklists.filter(c => !filterLine || c.Line_Equipment === filterLine).map(c => c.Sub_Line_Equipment).filter(Boolean))], [checklists, filterLine]);
   const components = useMemo(() => [...new Set(checklists.map(c => c.Component).filter(Boolean))], [checklists]);
-  const frequencies = useMemo(() => [...new Set(checklists.map(c => c.Frequency).filter(Boolean))], [checklists]);
+  
+  const PREBUILT_FREQ_NAMES = ['Daily', 'Shift-wise', 'Weekly', 'Fortnightly', 'Monthly', 'Quarterly', 'Yearly'];
+  const dynamicFreqs = useMemo(() => {
+    const fromChecklists = checklists.map(c => c.Frequency).filter(Boolean);
+    const fromMaster = (frequencies || []).map(f => f.name);
+    return [...new Set([...PREBUILT_FREQ_NAMES, ...fromChecklists, ...fromMaster])];
+  }, [checklists, frequencies]);
 
   const filteredChecklists = useMemo(() => checklists.filter(c => {
     const txt = filterText.toLowerCase();
@@ -172,7 +179,14 @@ const UploadChecklist = () => {
           style={{ padding: '0.75rem 1rem', borderBottom: activeTab === 'view' ? '2px solid var(--primary-light)' : 'none', color: activeTab === 'view' ? 'var(--primary-light)' : 'var(--text-secondary)', fontWeight: activeTab === 'view' ? 600 : 400, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <List size={18} /> View Checklists
         </div>
+        <div 
+          onClick={() => setActiveTab('freq')}
+          style={{ padding: '0.75rem 1rem', borderBottom: activeTab === 'freq' ? '2px solid var(--primary-light)' : 'none', color: activeTab === 'freq' ? 'var(--primary-light)' : 'var(--text-secondary)', fontWeight: activeTab === 'freq' ? 600 : 400, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Settings size={18} /> Frequency Master
+        </div>
       </div>
+
+      {activeTab === 'freq' && <FrequencyMaster />}
 
       {activeTab === 'upload' && (
         <div className="card">
@@ -279,7 +293,7 @@ const UploadChecklist = () => {
               {/* Frequency Filter */}
               <select value={filterFrequency} onChange={e => setFilterFrequency(e.target.value)} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }}>
                 <option value="">All Frequencies</option>
-                {frequencies.map(f => <option key={f} value={f}>{f}</option>)}
+                {dynamicFreqs.map(f => <option key={f} value={f}>{f}</option>)}
               </select>
             </div>
           </div>
@@ -387,7 +401,7 @@ const UploadChecklist = () => {
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.4rem' }}>Frequency *</label>
               <select value={newActivity.Frequency} onChange={e => setNewActivity({...newActivity, Frequency: e.target.value})} style={{ width: '100%', padding: '0.6rem', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-                {['Daily', 'Weekly', 'Monthly', 'Shift-wise', 'Quarterly'].map(f => <option key={f} value={f}>{f}</option>)}
+                {dynamicFreqs.map(f => <option key={f} value={f}>{f}</option>)}
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>

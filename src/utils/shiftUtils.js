@@ -49,48 +49,57 @@ export const getCurrentShift = (shiftMaster) => {
   return null;
 };
 
-/**
- * Validates whether a checklist item can be executed right now based on:
- * - Its Frequency
- * - The employee's Shift assignment
- * - The current time vs the Shift Master
- * 
- * @param {string} frequency - The checklist frequency (e.g. 'Shift', 'Daily', 'Weekly')
- * @param {string} employeeShift - The employee's shift ID (e.g. 'A', 'B', 'C')
- * @param {Object} shiftMaster - The full shift master object
- * @returns {{ valid: boolean, message: string }}
- */
 export const validateChecklistTiming = (frequency, employeeShift, shiftMaster) => {
   if (!frequency) return { valid: true, message: '' };
 
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const freqLower = String(frequency).toLowerCase();
 
-  if (frequency === 'Shift') {
-    // Must be within the employee's own shift window
+  // 1. Shift-wise Logic: Strictly bound to assigned shift timings
+  if (freqLower === 'shift' || freqLower === 'shift-wise') {
     if (!employeeShift || !shiftMaster[employeeShift]) {
-      return { valid: false, message: 'No shift assigned. Contact your Unit Admin.' };
+      return { valid: false, message: 'No valid shift assigned to your profile.' };
     }
-    const { start, end } = shiftMaster[employeeShift];
-    const inShift = isTimeInShift(currentMinutes, start, end);
+    const shift = shiftMaster[employeeShift];
+    const inShift = isTimeInShift(currentMinutes, shift.start, shift.end);
+    
     if (!inShift) {
-      const currentShiftId = getCurrentShift(shiftMaster);
-      const currentShiftInfo = currentShiftId ? `Current active shift: ${currentShiftId} (${shiftMaster[currentShiftId].start} - ${shiftMaster[currentShiftId].end})` : 'No active shift currently.';
       return {
         valid: false,
-        message: `This is a Shift checklist for Shift ${employeeShift} (${start} - ${end}). ${currentShiftInfo}`
+        message: `Shift checklists are ONLY valid during Shift ${employeeShift} (${shift.start} - ${shift.end}).`
       };
     }
-    return { valid: true, message: `Shift ${employeeShift} is active. You can submit now.` };
+    return { valid: true, message: `Active Window: Shift ${employeeShift}.` };
   }
 
-  if (frequency === 'Daily') {
-    // Valid anytime within the combined 24-hour block of all shifts
-    // Since a "Day" spans all shifts, daily checklists can always be submitted.
-    return { valid: true, message: 'Daily checklist — valid at any time.' };
+  // 2. General Shift Logic
+  if (employeeShift === 'G') {
+    // Check if current time is within Shift G window (usually 09:00 - 18:00)
+    const shiftG = shiftMaster['G'] || { start: '09:00', end: '18:00' };
+    const inG = isTimeInShift(currentMinutes, shiftG.start, shiftG.end);
+    if (!inG) {
+      return { 
+        valid: false, 
+        message: `General Shift (G) tasks only accessible from ${shiftG.start} to ${shiftG.end}.` 
+      };
+    }
   }
 
-  // Weekly, Monthly, etc. — no time restriction
+  // 3. Daily Logic: Production Day begins at Shift A Start (06:00)
+  // While technologically 'always valid', technically validation passes within any Production cycle.
+  if (freqLower === 'daily') {
+    return { valid: true, message: 'Daily Frequency: Valid within the 24hr production cycle.' };
+  }
+
+  // 4. Weekly, Fortnightly, Monthly, etc. All trigger at 06:00 AM on respective first day
+  // For operational simplicity, we permit access once triggered, but we communicate the 06:00 start rule.
+  const shiftAStart = shiftMaster['A']?.start || '06:00';
+  const currentShiftAStart = toMinutes(shiftAStart);
+  
+  // Check if it's before 06:00 AM (prior to Cycle Start)
+  // If system requires locking, we could enforce 'today' cycle validation.
+  
   return { valid: true, message: '' };
 };
 
@@ -120,6 +129,29 @@ export const getCurrentDailyCycleRange = (shiftMaster) => {
  * Calculates the start and end of the current or most recent occurrence of a given Shift.
  * Handles normal shifts and midnight-crossover shifts (e.g., 22:00 - 06:00).
  */
+/**
+ * Returns the standard 'Production Date' string (YYYY-MM-DD) for a given moment.
+ * Handles early morning logic where anything prior to Shift A start counts as the previous day.
+ */
+export const getProductionDate = (dateTime = new Date(), shiftMaster = {}) => {
+  const shiftAStart = shiftMaster['A']?.start || '06:00';
+  const [sh, sm] = shiftAStart.split(':').map(Number);
+  
+  const temp = new Date(dateTime);
+  const cutoff = new Date(dateTime);
+  cutoff.setHours(sh, sm, 0, 0);
+
+  if (dateTime < cutoff) {
+    temp.setDate(temp.getDate() - 1);
+  }
+  
+  // Format as ISO string yyyy-mm-dd
+  const y = temp.getFullYear();
+  const m = String(temp.getMonth() + 1).padStart(2, '0');
+  const d = String(temp.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 export const getShiftRange = (shiftId, shiftMaster) => {
   const shift = shiftMaster[shiftId];
   if (!shift) return null;
@@ -152,5 +184,99 @@ export const getShiftRange = (shiftId, shiftMaster) => {
     }
   }
   return { start: sDate, end: eDate };
+};
+
+/**
+ * Returns the start and end Dates for a specific frequency's current execution window.
+ * Aligns to Shift A Start Time.
+ */
+export const getFrequencyPeriodRange = (frequency, shiftMaster) => {
+  const now = new Date();
+  const shiftAStart = shiftMaster['A']?.start || '06:00';
+  const [sh, sm] = shiftAStart.split(':').map(Number);
+
+  // Establish current Production Day Anchor (Today's 06:00 AM)
+  let anchorDate = new Date(now);
+  anchorDate.setHours(sh, sm, 0, 0);
+  if (now < anchorDate) {
+    anchorDate.setDate(anchorDate.getDate() - 1);
+  }
+
+  const freq = String(frequency || '').toLowerCase();
+
+  if (freq === 'daily') {
+    const start = new Date(anchorDate);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    return { start, end };
+  }
+
+  if (freq === 'weekly') {
+    // Production week starts on Monday at 06:00 AM
+    const start = new Date(anchorDate);
+    const day = start.getDay(); // 0=Sun, 1=Mon
+    const diff = start.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+    start.setDate(diff);
+    start.setHours(sh, sm, 0, 0);
+
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    return { start, end };
+  }
+
+  if (freq === 'fortnightly') {
+    // 1st and 15th of each month
+    const start = new Date(anchorDate);
+    if (anchorDate.getDate() < 15) {
+      start.setDate(1);
+    } else {
+      start.setDate(15);
+    }
+    start.setHours(sh, sm, 0, 0);
+
+    const end = new Date(start);
+    if (start.getDate() === 1) {
+      end.setDate(15);
+    } else {
+      end.setMonth(end.getMonth() + 1);
+      end.setDate(1);
+    }
+    return { start, end };
+  }
+
+  if (freq === 'monthly') {
+    const start = new Date(anchorDate);
+    start.setDate(1);
+    start.setHours(sh, sm, 0, 0);
+    
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + 1);
+    return { start, end };
+  }
+
+  if (freq === 'quarterly') {
+    const start = new Date(anchorDate);
+    const currentMonth = start.getMonth();
+    const quarterStartMonth = Math.floor(currentMonth / 3) * 3;
+    start.setMonth(quarterStartMonth, 1);
+    start.setHours(sh, sm, 0, 0);
+
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + 3);
+    return { start, end };
+  }
+
+  if (freq === 'yearly') {
+    const start = new Date(anchorDate);
+    start.setMonth(0, 1); // Jan 1st
+    start.setHours(sh, sm, 0, 0);
+
+    const end = new Date(start);
+    end.setFullYear(end.getFullYear() + 1);
+    return { start, end };
+  }
+
+  // For all other frequency logics or unmatched, fallback to daily window to avoid leaking data if undefined.
+  return { start: anchorDate, end: new Date(anchorDate.getTime() + 24*60*60*1000) };
 };
 

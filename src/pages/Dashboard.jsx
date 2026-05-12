@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Filter, Calendar, BarChart as BarIcon, 
   CheckCircle, AlertTriangle, Clock, Users, ChevronDown, 
   ChevronUp, Activity, X, Search, ClipboardList, FileClock,
-  TrendingUp, RefreshCw, Layers, Shield, Award, HelpCircle
+  TrendingUp, RefreshCw, Layers, Shield, Award, HelpCircle, Settings
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, 
@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 
 import { useData } from '../context/DataContext';
+import AdvancedAnalyticsDashboard from '../components/AdvancedAnalyticsDashboard';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -26,7 +27,12 @@ const Dashboard = () => {
     dateEnd: '',
     type: 'ALL',
     line: 'ALL',
-    subLine: 'ALL'
+    subLine: 'ALL',
+    frequency: 'ALL',
+    userFilter: '',
+    shift: 'ALL',
+    docNo: 'ALL',
+    revNo: 'ALL'
   });
 
   const COLORS = {
@@ -48,6 +54,11 @@ const Dashboard = () => {
       if (filters.type !== 'ALL' && item.Type_of_Activity !== filters.type) return false;
       if (filters.line !== 'ALL' && item.Line_Equipment !== filters.line) return false;
       if (filters.subLine !== 'ALL' && item.Sub_Line_Equipment !== filters.subLine) return false;
+      if (filters.frequency && filters.frequency !== 'ALL' && item.Frequency !== filters.frequency) return false;
+      if (filters.userFilter && !(item.Submitted_By || '').toLowerCase().includes(filters.userFilter.toLowerCase())) return false;
+      if (filters.shift !== 'ALL' && item.Shift !== filters.shift) return false;
+      if (filters.docNo !== 'ALL' && item.Document_Number !== filters.docNo) return false;
+      if (filters.revNo !== 'ALL' && item.Revision_Number !== filters.revNo) return false;
       return true;
     });
   }, [rawData, filters]);
@@ -58,6 +69,9 @@ const Dashboard = () => {
       if (filters.type !== 'ALL' && item.Type_of_Activity !== filters.type) return false;
       if (filters.line !== 'ALL' && item.Line_Equipment !== filters.line) return false;
       if (filters.subLine !== 'ALL' && item.Sub_Line_Equipment !== filters.subLine) return false;
+      if (filters.frequency && filters.frequency !== 'ALL' && item.Frequency !== filters.frequency) return false;
+      if (filters.docNo !== 'ALL' && item.Document_Number !== filters.docNo) return false;
+      if (filters.revNo !== 'ALL' && item.Revision_Number !== filters.revNo) return false;
       return true;
     });
   }, [masterChecklists, filters]);
@@ -388,7 +402,7 @@ const Dashboard = () => {
   }, [filteredData, supportInbox]);
 
   const resetFilters = () => {
-    setFilters({ dateStart: '', dateEnd: '', type: 'ALL', line: 'ALL', subLine: 'ALL' });
+    setFilters({ dateStart: '', dateEnd: '', type: 'ALL', line: 'ALL', subLine: 'ALL', frequency: 'ALL', userFilter: '', shift: 'ALL', docNo: 'ALL', revNo: 'ALL' });
   };
 
   return (
@@ -416,15 +430,52 @@ const Dashboard = () => {
             <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}><Filter size={16} /> Filter Dataset Scope</h4>
             <button onClick={resetFilters} style={{ background: 'none', border: 'none', color: 'var(--primary-light)', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>Reset All</button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>DATE RANGE</label>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', alignItems: 'end' }}>
+            <div style={{ gridColumn: 'span 2' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>PRODUCTION DATE WINDOW</label>
+              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                 <input type="date" value={filters.dateStart} onChange={e => setFilters({...filters, dateStart: e.target.value})} style={{ flex: 1, padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }} />
-                <span style={{ color: 'var(--text-tertiary)' }}>to</span>
+                <span style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>to</span>
                 <input type="date" value={filters.dateEnd} onChange={e => setFilters({...filters, dateEnd: e.target.value})} style={{ flex: 1, padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }} />
               </div>
             </div>
+            
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>SHIFT</label>
+              <select value={filters.shift} onChange={e => setFilters({...filters, shift: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
+                <option value="ALL">All Shifts</option>
+                {['A','B','C','G','General'].map(s => <option key={s} value={s}>Shift {s}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>FREQUENCY</label>
+              <select value={filters.frequency} onChange={e => setFilters({...filters, frequency: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
+                <option value="ALL">All Frequencies</option>
+                {[...new Set([
+                  'Daily', 'Shift-wise', 'Weekly', 'Fortnightly', 'Monthly', 'Quarterly',
+                  ...rawData.map(d => d.Frequency),
+                  ...masterChecklists.map(d => d.Frequency)
+                ].filter(Boolean))].map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>DOC NUMBER</label>
+              <select value={filters.docNo} onChange={e => setFilters({...filters, docNo: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
+                <option value="ALL">All Docs</option>
+                {[...new Set([...rawData.map(d => d.Document_Number), ...masterChecklists.map(d => d.Document_Number)].filter(d => d && d !== '-'))].map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>REVISION</label>
+              <select value={filters.revNo} onChange={e => setFilters({...filters, revNo: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
+                <option value="ALL">All Revs</option>
+                {[...new Set([...rawData.map(d => d.Revision_Number), ...masterChecklists.map(d => d.Revision_Number)].filter(r => r && r !== '-'))].map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>ACTIVITY TYPE</label>
               <select value={filters.type} onChange={e => setFilters({...filters, type: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
@@ -432,19 +483,28 @@ const Dashboard = () => {
                 {[...new Set(rawData.map(d => d.Type_of_Activity).filter(Boolean))].map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
+
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>LINE / EQUIPMENT</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>LINE / EQUIP</label>
               <select value={filters.line} onChange={e => setFilters({...filters, line: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
                 <option value="ALL">All Lines</option>
                 {[...new Set(rawData.map(d => d.Line_Equipment).filter(Boolean))].map(l => <option key={l} value={l}>{l}</option>)}
               </select>
             </div>
+
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>SUB-LINE</label>
-              <select value={filters.subLine} onChange={e => setFilters({...filters, subLine: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
-                <option value="ALL">All Sub-Lines</option>
-                {[...new Set(rawData.map(d => d.Sub_Line_Equipment).filter(Boolean))].map(sl => <option key={sl} value={sl}>{sl}</option>)}
-              </select>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>OPERATOR / USER</label>
+              <input 
+                type="text" 
+                placeholder="Find user..." 
+                list="user-list"
+                value={filters.userFilter} 
+                onChange={e => setFilters({...filters, userFilter: e.target.value})} 
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }} 
+              />
+              <datalist id="user-list">
+                {[...new Set(rawData.map(d => d.Submitted_By).filter(Boolean))].map(u => <option key={u} value={u} />)}
+              </datalist>
             </div>
           </div>
         </div>
@@ -453,11 +513,13 @@ const Dashboard = () => {
       {/* Dashboard Sub-navigation Tabs (Dynamic Aesthetic Pills) */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', overflowX: 'auto', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
         {[
+          { id: 'advanced', label: '👑 Advanced Analysis', icon: Award },
           { id: 'realtime', label: '📊 Real-Time Operations', icon: Activity },
           { id: 'shift', label: '🔄 Shift & Carry-Forward', icon: RefreshCw },
           { id: 'time', label: '⏱ Time & Productivity', icon: Clock },
           { id: 'workforce', label: '👥 Workforce Performance', icon: Users },
           { id: 'compliance', label: '🧩 Activity & Compliance', icon: ClipboardList },
+          { id: 'aging', label: '⏳ Aging Report', icon: FileClock },
           { id: 'insights', label: '🔮 Alerts & Insights', icon: AlertTriangle }
         ].map(tab => {
           const IconComp = tab.icon;
@@ -488,6 +550,16 @@ const Dashboard = () => {
           );
         })}
       </div>
+
+      {/* ========================================================
+          TAB 0: ADVANCED ANALYSIS
+          ======================================================== */}
+      {activeTab === 'advanced' && (
+        <AdvancedAnalyticsDashboard 
+          preFilteredData={filteredData} 
+          baseChecklists={baselineChecklists} 
+        />
+      )}
 
       {/* ========================================================
           TAB 1: REAL-TIME OPERATIONS
@@ -826,6 +898,41 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
+
+          {/* User Daily Trend Visualizer */}
+          <div className="card" style={{ borderTop: '4px solid var(--primary-light)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
+                <TrendingUp size={18} color="var(--primary-light)" /> Workforce Productivity Heat (7-Day View)
+              </h3>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Daily distribution of completed items across top users</div>
+            </div>
+            <div style={{ height: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={(() => {
+                  const dates = [...new Set(filteredData.map(r => r.Date).filter(Boolean))].sort().slice(-7);
+                  const topUsers = userPerformance.leaderboard.slice(0, 4).map(u => u.name);
+                  return dates.map(date => {
+                    const dayLogs = filteredData.filter(r => r.Date === date && r.Status === 'Done');
+                    const res = { date };
+                    topUsers.forEach(u => {
+                      res[u] = dayLogs.filter(l => (l.Submitted_By || '').includes(u)).length;
+                    });
+                    return res;
+                  });
+                })()}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                  <XAxis dataKey="date" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={10} tickLine={false} axisLine={false} />
+                  <Tooltip />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px' }} />
+                  {userPerformance.leaderboard.slice(0, 4).map((u, i) => (
+                    <Line key={u.name} type="monotone" dataKey={u.name} stroke={SHIFT_COLORS[i % SHIFT_COLORS.length]} strokeWidth={2.5} dot={{ r: 3 }} />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1057,6 +1164,146 @@ const Dashboard = () => {
                   <strong>⚡ Shift Transition Buffer:</strong> Carry-forward backlog builds up at the end of Shift A. Suggest holding a 15-minute sync overlap buffer before operator swap to clear pending WIP.
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ========================================================
+          TAB 7: AGING REPORT
+          ======================================================= */}
+      {activeTab === 'aging' && (
+        <div style={{ display: 'grid', gap: '1.5rem' }}>
+          <div style={{ background: 'linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%)', border: 'none', padding: '1.5rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#FFFFFF' }}>
+            <div>
+              <h3 style={{ margin: 0, color: '#FFFFFF', fontWeight: 800 }}>⚠️ Heavy Activity Aging Command Tower</h3>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '2rem', fontWeight: 900, color: '#FFFFFF' }}>
+                {rawData.filter(r => r.Status !== 'Done').length}
+              </div>
+              <span style={{ fontSize: '0.75rem', color: '#BFDBFE', fontWeight: 600, textTransform: 'uppercase' }}>TOTAL BACKLOG ITEMS</span>
+            </div>
+          </div>
+
+          {/* Critical Hotspots Analytical Spotlight Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.25rem' }}>
+            {(() => {
+              const pending = rawData.filter(r => r.Status !== 'Done');
+              const findMaxGroup = (keyName) => {
+                const map = {};
+                pending.forEach(r => {
+                  const val = r[keyName] || 'Unknown';
+                  const diffHrs = (new Date() - new Date(r.Date_Timestamp || r.Date)) / 36e5;
+                  if(!map[val] || map[val] < diffHrs) map[val] = diffHrs;
+                });
+                const sorted = Object.entries(map).sort((a,b) => b[1] - a[1])[0];
+                return sorted ? { name: sorted[0], hrs: Math.round(sorted[1]) } : null;
+              };
+              
+              const maxType = findMaxGroup('Type_of_Activity');
+              const maxLine = findMaxGroup('Line_Equipment');
+              const maxComp = findMaxGroup('Component');
+              
+              return (
+                <>
+                  <div className="card" style={{ borderLeft: '4px solid #DC2626', display: 'flex', gap: '1rem', alignItems: 'center', padding: '1rem 1.25rem' }}>
+                    <div style={{ background: '#FEF2F2', padding: '0.75rem', borderRadius: '12px' }}><AlertTriangle color="#DC2626" size={24} /></div>
+                    <div>
+                      <div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Worst Aging Line</div>
+                      <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1E293B' }}>{maxLine?.name || 'N/A'}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#B91C1C', fontWeight: 600 }}>🔥 Max Age: {Math.round((maxLine?.hrs || 0)/24)} Days</div>
+                    </div>
+                  </div>
+                  <div className="card" style={{ borderLeft: '4px solid #F59E0B', display: 'flex', gap: '1rem', alignItems: 'center', padding: '1rem 1.25rem' }}>
+                    <div style={{ background: '#FFFBEB', padding: '0.75rem', borderRadius: '12px' }}><Clock color="#F59E0B" size={24} /></div>
+                    <div>
+                      <div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Worst Aging Type</div>
+                      <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1E293B' }}>{maxType?.name || 'N/A'}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#D97706', fontWeight: 600 }}>⏳ Waiting Duration: {Math.round((maxType?.hrs || 0)/24)} Days</div>
+                    </div>
+                  </div>
+                  <div className="card" style={{ borderLeft: '4px solid #4F46E5', display: 'flex', gap: '1rem', alignItems: 'center', padding: '1rem 1.25rem' }}>
+                    <div style={{ background: '#EEF2FF', padding: '0.75rem', borderRadius: '12px' }}><Settings color="#4F46E5" size={24} /></div>
+                    <div>
+                      <div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Stuck Component</div>
+                      <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1E293B' }}>{maxComp?.name || 'N/A'}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#4338CA', fontWeight: 600 }}>⚠️ Longest Cycle Blockage</div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Comprehensive Breakdown Table */}
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', fontWeight: 800 }}><Activity color="#EF4444" /> Long-Tail Aging Decomposition Matrix</h3>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '2px solid #E2E8F0' }}>
+                    <th style={{ padding: '0.8rem 1rem' }}>Activity Hierarchy</th>
+                    <th style={{ padding: '0.8rem 1rem' }}>Origin Line</th>
+                    <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem', borderLeft: '1px solid #F1F5F9' }}>{'< 8 HR'}</th>
+                    <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'1-7 DAY'}</th>
+                    <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'8-30 DAY'}</th>
+                    <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'1-6 MO'}</th>
+                    <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem', color: '#DC2626' }}>{'> 6 MO'}</th>
+                    <th style={{ padding: '0.8rem 1rem', textAlign: 'right' }}>Action Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const map = {};
+                    rawData.filter(r => r.Status !== 'Done').forEach(r => {
+                      const key = `${r.Activity_Description || 'Unk'} @ ${r.Component || 'Unk'}`;
+                      if(!map[key]) map[key] = { desc: r.Activity_Description, comp: r.Component, freq: r.Frequency, line: r.Line_Equipment, type: r.Type_of_Activity, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 };
+                      
+                      const diffHrs = (new Date() - new Date(r.Date_Timestamp || r.Date)) / 36e5;
+                      if (diffHrs < 8) map[key].s1++;
+                      else if (diffHrs < 168) map[key].s2++; // 7 Days
+                      else if (diffHrs < 720) map[key].s3++; // 30 Days
+                      else if (diffHrs < 4320) map[key].s4++; // 6 Months
+                      else map[key].s5++; // >6 Months
+                    });
+                    const rows = Object.values(map).sort((a,b) => (b.s5*100 + b.s4*10 + b.s3) - (a.s5*100 + a.s4*10 + a.s3));
+                    
+                    if(rows.length === 0) return <tr><td colSpan="8" style={{ padding: '3rem', textAlign: 'center', color: '#94A3B8', fontSize: '0.9rem' }}>🎉 Operation Clean: Zero backlog items currently identified across all tracked components.</td></tr>;
+                    
+                    return rows.map((row, idx) => {
+                      const isCritical = row.s4 > 0 || row.s5 > 0;
+                      const isSevere = row.s3 > 0;
+                      return (
+                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <strong style={{ color: '#1E293B' }}>{row.comp}</strong>
+                            <div style={{ fontSize: '0.65rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{row.desc}</div>
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600 }}>{row.line}</span>
+                            <div style={{ fontSize: '0.65rem', color: '#94A3B8' }}>{row.type} • {row.freq}</div>
+                          </td>
+                          <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s1 ? '#64748B' : '#E2E8F0', fontWeight: row.s1 ? 700 : 400, borderLeft: '1px solid #F8FAFC' }}>{row.s1 || '-'}</td>
+                          <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s2 ? '#D97706' : '#E2E8F0', fontWeight: row.s2 ? 700 : 400 }}>{row.s2 || '-'}</td>
+                          <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s3 ? '#EA580C' : '#E2E8F0', fontWeight: row.s3 ? 800 : 400 }}>{row.s3 || '-'}</td>
+                          <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s4 ? '#DC2626' : '#E2E8F0', fontWeight: row.s4 ? 900 : 400, background: row.s4 ? '#FEF2F2' : 'transparent' }}>{row.s4 || '-'}</td>
+                          <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s5 ? '#991B1B' : '#E2E8F0', fontWeight: row.s5 ? 900 : 400, background: row.s5 ? '#FEE2E2' : 'transparent' }}>{row.s5 || '-'}</td>
+                          <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                            <span style={{ 
+                              padding: '0.25rem 0.5rem', borderRadius: '6px', fontSize: '0.65rem', fontWeight: 800, color: '#FFF',
+                              backgroundColor: isCritical ? '#991B1B' : isSevere ? '#EA580C' : row.s2 > 0 ? '#D97706' : '#10B981' 
+                            }}>
+                              {isCritical ? 'CRITICAL DEBT' : isSevere ? 'ELEVATED' : 'STABLE'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

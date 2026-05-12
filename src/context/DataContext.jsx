@@ -12,6 +12,7 @@ export const DataProvider = ({ children }) => {
   const [logs, setLogs] = useState([]);
   const [activities, setActivities] = useState([]);
   const [shifts, setShifts] = useState([]);
+  const [frequencies, setFrequencies] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -55,6 +56,11 @@ export const DataProvider = ({ children }) => {
       setShifts(val ? Object.values(val).filter(Boolean) : []);
     });
 
+    // 9. Sync Frequencies
+    const unsubFreqs = syncData('frequencies', (val) => {
+      setFrequencies(val ? Object.values(val).filter(Boolean) : []);
+    });
+
     setLoading(false);
 
     return () => {
@@ -66,6 +72,7 @@ export const DataProvider = ({ children }) => {
       unsubLogs();
       unsubActivities();
       unsubShifts();
+      unsubFreqs();
     };
   }, []);
 
@@ -76,7 +83,7 @@ export const DataProvider = ({ children }) => {
 
   return (
     <DataContext.Provider value={{ 
-      employees, checklists, units, submissions, supportInbox, logs, activities, shifts,
+      employees, checklists, units, submissions, supportInbox, logs, activities, shifts, frequencies,
       updateFirebase, loading 
     }}>
       {children}

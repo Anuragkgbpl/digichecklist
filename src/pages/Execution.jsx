@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { PlayCircle, Camera, X, Inbox, Info, CheckCircle, AlertCircle, Image, ZoomIn, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { validateChecklistTiming, getCurrentShift, getCurrentDailyCycleRange, getShiftRange } from '../utils/shiftUtils';
+import { validateChecklistTiming, getCurrentShift, getCurrentDailyCycleRange, getShiftRange, getFrequencyPeriodRange, getProductionDate } from '../utils/shiftUtils';
 
 
 // ── Progress Bar ──────────────────────────────────────────────
@@ -279,9 +279,7 @@ const Execution = () => {
 
       if (isPostponed) return false;
 
-      // 2. Filter out completed "Done" items for Daily and Shift frequencies
-      if (freq !== 'daily' && freq !== 'shift') return true;
-
+      // 2. Filter out completed "Done" items based on frequency logical window
       const isDone = (cloudSubmissions || []).some(sub => {
         const matchesKey = 
           String(sub.Type_of_Activity || '').trim().toLowerCase() === String(chk.Type_of_Activity || '').trim().toLowerCase() &&
@@ -295,16 +293,17 @@ const Execution = () => {
 
         const subTime = sub.Date_Timestamp ? new Date(sub.Date_Timestamp) : new Date(sub.Date || Date.now());
         
-        if (freq === 'daily') {
-          return subTime >= dailyRange.start && subTime < dailyRange.end;
-        } else if (freq === 'shift') {
+        if (freq === 'shift' || freq === 'shift-wise') {
           const currentShiftId = getCurrentShift(shiftMaster);
           if (!currentShiftId) return false;
           const shiftRange = getShiftRange(currentShiftId, shiftMaster);
           if (!shiftRange) return false;
           return subTime >= shiftRange.start && subTime < shiftRange.end;
         }
-        return false;
+
+        // Use generic period range logic for Daily, Weekly, Fortnightly, Monthly, etc.
+        const range = getFrequencyPeriodRange(chk.Frequency, shiftMaster);
+        return subTime >= range.start && subTime < range.end;
       });
 
       return !isDone;
@@ -389,14 +388,15 @@ const Execution = () => {
     try {
       const submittedItems = filteredChecklists.filter(c => {
         const s = statusUpdates[c.id] || 'Pending';
-        return s === 'Done';
+        return s !== 'Pending';
       });
 
       const currentShiftId = getCurrentShift(shiftMaster) || 'General';
+      const productionDate = getProductionDate(now, shiftMaster);
 
       const newRecords = submittedItems.map(c => ({
         id: `${Date.now()}-${c.id}`,
-        Date: now.toISOString().split('T')[0],
+        Date: productionDate,
         Type_of_Activity: c.Type_of_Activity,
         Line_Equipment: c.Line_Equipment,
         Sub_Line_Equipment: c.Sub_Line_Equipment,
