@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Layers, ChevronRight, ArrowLeft, CheckCircle, MapPin } from 'lucide-react';
+import { Layers, ChevronRight, ArrowLeft, CheckCircle, MapPin, Box } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const ScanLineSelect = () => {
@@ -13,10 +13,12 @@ const ScanLineSelect = () => {
   const activityType = queryParams.get('activityType') || '';
   const preSelectedLine = queryParams.get('line') || '';
 
-  const [step, setStep] = useState(preSelectedLine ? 2 : 1); // 1=Line, 2=Sub-Line
+  const [step, setStep] = useState(preSelectedLine ? 2 : 1); // 1=Line, 2=Sub-Line, 3=Component
   const [selectedLine, setSelectedLine] = useState(preSelectedLine);
+  const [selectedSubLine, setSelectedSubLine] = useState('');
   const [lines, setLines] = useState([]);
   const [subLines, setSubLines] = useState([]);
+  const [components, setComponents] = useState([]);
 
   useEffect(() => {
     if (dataLoading) return;
@@ -48,46 +50,66 @@ const ScanLineSelect = () => {
     // Apply user access control
     relevant = relevant.filter(c => hasAccess(c.Type_of_Activity));
 
-    // Filter by previous selections
-    if (selectedLine) {
-      relevant = relevant.filter(c => c.Line_Equipment === selectedLine);
-    }
-
+    // 1. Set Line options
     const uniqueLines = [...new Set(relevant.map(c => c.Line_Equipment).filter(Boolean))];
-    const uniqueSubs = [...new Set(relevant.map(c => c.Sub_Line_Equipment).filter(Boolean))];
-
     setLines(uniqueLines);
+
+    // 2. If Line is selected, filter subline options
+    let lineFiltered = relevant;
+    if (selectedLine) {
+      lineFiltered = relevant.filter(c => c.Line_Equipment === selectedLine);
+    }
+    const uniqueSubs = [...new Set(lineFiltered.map(c => c.Sub_Line_Equipment).filter(Boolean))];
     setSubLines(uniqueSubs);
-  }, [activityType, selectedLine, user, cloudChecklists, dataLoading]);
+
+    // 3. Filter component options
+    let subLineFiltered = lineFiltered;
+    if (selectedSubLine) {
+      subLineFiltered = lineFiltered.filter(c => c.Sub_Line_Equipment === selectedSubLine);
+    }
+    const uniqueComps = [...new Set(subLineFiltered.map(c => c.Component).filter(Boolean))];
+    setComponents(uniqueComps);
+
+  }, [activityType, selectedLine, selectedSubLine, user, cloudChecklists, dataLoading]);
 
   const handleLineSelect = (line) => {
     setSelectedLine(line);
+    setSelectedSubLine(''); // reset subline on new line choice
     const relevant = (activityType ? cloudChecklists.filter(c => c.Type_of_Activity === activityType) : cloudChecklists)
                     .filter(c => c.Line_Equipment === line);
     const subs = [...new Set(relevant.map(c => c.Sub_Line_Equipment).filter(Boolean))];
     if (subs.length === 0) {
-      // Navigate directly if no sublines
-      const params = new URLSearchParams();
-      if (activityType) params.set('activityType', activityType);
-      params.set('line', line);
-      navigate(`/user/execute?${params.toString()}`);
+      // If no sub-lines, step straight to component
+      setStep(3);
     } else {
       setStep(2);
     }
   };
 
   const handleSubLineSelect = (subLine) => {
-    const params = new URLSearchParams();
-    if (activityType) params.set('activityType', activityType);
-    if (selectedLine) params.set('line', selectedLine);
-    params.set('subLine', subLine);
-    navigate(`/user/execute?${params.toString()}`);
+    setSelectedSubLine(subLine);
+    setStep(3);
   };
 
   const handleSkipSubLine = () => {
+    setSelectedSubLine('');
+    setStep(3);
+  };
+
+  const handleComponentSelect = (component) => {
     const params = new URLSearchParams();
     if (activityType) params.set('activityType', activityType);
     if (selectedLine) params.set('line', selectedLine);
+    if (selectedSubLine) params.set('subLine', selectedSubLine);
+    if (component) params.set('component', component);
+    navigate(`/user/execute?${params.toString()}`);
+  };
+
+  const handleSkipComponent = () => {
+    const params = new URLSearchParams();
+    if (activityType) params.set('activityType', activityType);
+    if (selectedLine) params.set('line', selectedLine);
+    if (selectedSubLine) params.set('subLine', selectedSubLine);
     navigate(`/user/execute?${params.toString()}`);
   };
 
@@ -122,8 +144,8 @@ const ScanLineSelect = () => {
 
 
         {/* Stepper */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem', maxWidth: '300px', margin: '0 auto 2rem' }}>
-          {['Line', 'Sub-Line'].map((label, i) => (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem', maxWidth: '400px', margin: '0 auto 2rem' }}>
+          {['Line', 'Sub-Line', 'Component'].map((label, i) => (
             <React.Fragment key={label}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
                 <div style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.75rem', backgroundColor: step > i + 1 ? '#10B981' : step === i + 1 ? 'var(--primary-light)' : '#E2E8F0', color: step >= i + 1 ? '#fff' : 'var(--text-tertiary)' }}>
@@ -131,7 +153,7 @@ const ScanLineSelect = () => {
                 </div>
                 <span style={{ fontSize: '0.65rem', marginTop: '0.3rem', color: step === i + 1 ? 'var(--primary-light)' : 'var(--text-tertiary)', fontWeight: step === i + 1 ? 600 : 400 }}>{label}</span>
               </div>
-              {i < 1 && <div style={{ flex: 1.5, height: '2px', backgroundColor: step > i + 1 ? '#10B981' : '#E2E8F0', margin: '0 0.2rem', marginBottom: '1rem' }} />}
+              {i < 2 && <div style={{ flex: 1.5, height: '2px', backgroundColor: step > i + 1 ? '#10B981' : '#E2E8F0', margin: '0 0.2rem', marginBottom: '1rem' }} />}
             </React.Fragment>
           ))}
         </div>
@@ -173,7 +195,7 @@ const ScanLineSelect = () => {
         {step === 2 && (
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-              <button onClick={() => { setStep(1); setSelectedLine(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary-light)', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem', fontWeight: 600, padding: 0 }}>
+              <button onClick={() => { setStep(1); setSelectedLine(''); setSelectedSubLine(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary-light)', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem', fontWeight: 600, padding: 0 }}>
                 <ArrowLeft size={16} /> Back
               </button>
               <span style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>/ {selectedLine}</span>
@@ -200,7 +222,49 @@ const ScanLineSelect = () => {
                 </div>
               ))}
               <button onClick={handleSkipSubLine} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', padding: '0.75rem', marginTop: '0.25rem' }}>
-                Skip Sub-Line (Load All)
+                Skip Sub-Line
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 — Select Component */}
+        {step === 3 && (
+          <div className="card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+              <button onClick={() => { setStep(subLines.length > 0 ? 2 : 1); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary-light)', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem', fontWeight: 600, padding: 0 }}>
+                <ArrowLeft size={16} /> Back
+              </button>
+              <span style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>/ {selectedLine} {selectedSubLine && `/ ${selectedSubLine}`}</span>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+              Select a specific component to load checklists:
+            </p>
+            <div style={{ display: 'grid', gap: '0.75rem' }}>
+              {components.map(comp => (
+                <div key={comp} style={cardStyle()} onClick={() => handleComponentSelect(comp)}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary-light)'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Box size={16} color="var(--primary-light)" />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{comp}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Component / Module</div>
+                    </div>
+                  </div>
+                  <ChevronRight size={18} color="var(--text-tertiary)" />
+                </div>
+              ))}
+              {components.length === 0 && (
+                <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                  No specific components found.
+                </div>
+              )}
+              <button onClick={handleSkipComponent} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '0.75rem', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                Load All Components
               </button>
             </div>
           </div>
