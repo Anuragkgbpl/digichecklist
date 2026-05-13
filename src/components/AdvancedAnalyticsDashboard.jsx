@@ -450,7 +450,7 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
               <AlertTriangle size={18} color="#DC2626" /> ⚠️ High Risk Operations Spotlight (Worst-Performing Activity Clusters)
             </div>
             <p style={{ margin: '0 0 1rem 0', fontSize: '0.8rem', color: '#991B1B', lineHeight: 1.4 }}>
-              The following critical activities fail verification checks or remain pending on a <strong>majority of occasions</strong> (>30% Fail Rate). Immediate engineering or supervisory audit is required.
+              The following critical activities fail verification checks or remain pending on a <strong>majority of occasions</strong> (&gt;30% Fail Rate). Immediate engineering or supervisory audit is required.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               {laggingActivities.map((act, i) => (
