@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileClock, Search, List, ShieldCheck, Download, Camera, X } from 'lucide-react';
+import { FileClock, Search, List, ShieldCheck, Download, Camera, X, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
 
@@ -9,6 +9,24 @@ const PhotoLightbox = ({ src, onClose }) => (
     <img src={src} alt="Uploaded Proof" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: '8px', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()} />
   </div>
 );
+
+const formatDateDDMMYYYY = (dateStr) => {
+  if (!dateStr || dateStr === '-') return '-';
+  const clean = String(dateStr).split('T')[0];
+  if (clean.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    return clean.split('-').reverse().join('/');
+  }
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  } catch (e) {
+    return dateStr;
+  }
+};
 
 const Logs = () => {
   const { submissions: cloudSubmissions, logs: cloudLogs } = useData();
@@ -27,6 +45,7 @@ const Logs = () => {
   const [freqFilter, setFreqFilter] = useState('all');
   const [docFilter, setDocFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     setSubmissions([...cloudSubmissions].reverse());
@@ -117,9 +136,15 @@ const Logs = () => {
             Complete historical record of checklists and system access.
           </p>
         </div>
-        <button className="btn btn-secondary" onClick={exportToExcel} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Download size={16} /> Export to Excel
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button className={`btn ${showFilters ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowFilters(!showFilters)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Filter size={16} /> {showFilters ? 'Hide Filters' : 'Layout Filters'}
+            {showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          <button className="btn btn-secondary" onClick={exportToExcel} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Download size={16} /> Export to Excel
+          </button>
+        </div>
       </div>
 
       <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
@@ -133,50 +158,73 @@ const Logs = () => {
           </div>
         </div>
 
-        {/* Toolbar */}
-        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', flexWrap: 'wrap', gap: '1rem', backgroundColor: '#fff' }}>
-          <div style={{ flex: 1, minWidth: '200px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-sm)', padding: '0.4rem 0.75rem' }}>
+        {/* Persistent Quick Search Toolbar */}
+        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', flexWrap: 'wrap', gap: '1rem', backgroundColor: '#fff', marginBottom: showFilters ? '1.25rem' : 0 }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-sm)', padding: '0.4rem 0.75rem' }}>
             <Search size={16} color="var(--text-tertiary)" style={{ marginRight: '0.5rem' }} />
-            <input type="text" placeholder="Search activities, components..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', color: 'var(--text-primary)', fontSize: '0.875rem' }} />
+            <input type="text" placeholder="Quick search activities, components, descriptors..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', color: 'var(--text-primary)', fontSize: '0.875rem' }} />
           </div>
+        </div>
 
-          {activeTab === 'submissions' && (
-            <>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', flex: 1 }}>
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="select-input" style={{ width: 'auto', minWidth: '120px', fontSize: '0.75rem', padding: '0.35rem' }}>
+        {/* Dashboard-Style Modern Responsive Filter Drawer */}
+        {showFilters && activeTab === 'submissions' && (
+          <div style={{ backgroundColor: '#F8FAFC', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.25rem', margin: '0 1.5rem 1.5rem 1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '0.85rem', color: '#1E293B' }}><Filter size={15} /> Dataset Filters</h4>
+              <button 
+                onClick={() => {
+                  setStatusFilter('all'); setDateFilter(''); setShiftFilter('all'); 
+                  setFreqFilter('all'); setLineFilter('all'); setSubLineFilter('all');
+                  setDocFilter(''); setUserFilter(''); setSearchQuery('');
+                }}
+                style={{ background: 'none', border: 'none', color: 'var(--primary-light)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Reset Dataset
+              </button>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', alignItems: 'end' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>STATUS</label>
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="select-input" style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem' }}>
                   <option value="all">All Status</option>
                   {['Pending', 'Done', 'WIP', 'Hold', 'Postponed', 'Support Required'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                
-                <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="select-input" style={{ width: 'auto', fontSize: '0.75rem', padding: '0.35rem' }} />
+              </div>
 
-                <select value={shiftFilter} onChange={e => setShiftFilter(e.target.value)} className="select-input" style={{ width: 'auto', fontSize: '0.75rem', padding: '0.35rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>CALENDAR DATE</label>
+                <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="select-input" style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem' }} />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>OPERATIONAL SHIFT</label>
+                <select value={shiftFilter} onChange={e => setShiftFilter(e.target.value)} className="select-input" style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem' }}>
                   <option value="all">All Shifts</option>
                   {['A', 'B', 'C', 'G', 'Gen'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
+              </div>
 
-                <select value={freqFilter} onChange={e => setFreqFilter(e.target.value)} className="select-input" style={{ width: 'auto', fontSize: '0.75rem', padding: '0.35rem' }}>
-                  <option value="all">All Freq</option>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>FREQUENCY</label>
+                <select value={freqFilter} onChange={e => setFreqFilter(e.target.value)} className="select-input" style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem' }}>
+                  <option value="all">All Frequencies</option>
                   {['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Shift'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-
-                <input type="text" placeholder="Doc No..." value={docFilter} onChange={e => setDocFilter(e.target.value)} className="select-input" style={{ width: '100px', fontSize: '0.75rem', padding: '0.35rem' }} />
-                <input type="text" placeholder="Updated By..." value={userFilter} onChange={e => setUserFilter(e.target.value)} className="select-input" style={{ width: '120px', fontSize: '0.75rem', padding: '0.35rem' }} />
-
-                <button 
-                  onClick={() => {
-                    setStatusFilter('all'); setDateFilter(''); setShiftFilter('all'); 
-                    setFreqFilter('all'); setLineFilter('all'); setSubLineFilter('all');
-                    setDocFilter(''); setUserFilter(''); setSearchQuery('');
-                  }}
-                  style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', border: 'none', background: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  Reset
-                </button>
               </div>
-            </>
-          )}
-        </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>DOCUMENT NUMBER</label>
+                <input type="text" placeholder="e.g. DOC-123" value={docFilter} onChange={e => setDocFilter(e.target.value)} className="select-input" style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem' }} />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>SUBMITTED BY</label>
+                <input type="text" placeholder="Name or ID..." value={userFilter} onChange={e => setUserFilter(e.target.value)} className="select-input" style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', fontSize: '0.8rem' }} />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Data Table */}
         <div style={{ flex: 1, overflow: 'auto' }}>
@@ -213,7 +261,7 @@ const Logs = () => {
             <tbody>
               {activeTab === 'submissions' && getFilteredSubmissions().map((sub, i) => (
                 <tr key={sub.id || i} style={{ borderBottom: '1px solid var(--border-color)', '&:hover': { backgroundColor: '#F8FAFC' } }}>
-                  <td style={{ padding: '0.75rem 1rem' }}>{sub.Date || '-'}</td>
+                  <td style={{ padding: '0.75rem 1rem' }}>{formatDateDDMMYYYY(sub.Date)}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>{sub.Shift || 'Gen'}</td>
                   <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--primary-dark)' }}>{sub.Type_of_Activity || '-'}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>{sub.Line_Equipment || '-'}</td>
@@ -262,7 +310,9 @@ const Logs = () => {
 
               {activeTab === 'audit' && getFilteredAudit().map((log, i) => (
                 <tr key={log.id || i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ padding: '0.75rem 1rem', color: 'var(--text-tertiary)' }}>{new Date(log.timestamp).toLocaleString()}</td>
+                  <td style={{ padding: '0.75rem 1rem', color: 'var(--text-tertiary)' }}>
+                    {formatDateDDMMYYYY(log.timestamp)} <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>{new Date(log.timestamp).toLocaleTimeString()}</span>
+                  </td>
                   <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{log.type || 'System'}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>{log.user || 'System Auto'}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>{log.action} {log.details ? `— ${log.details}` : ''}</td>

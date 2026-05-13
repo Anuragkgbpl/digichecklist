@@ -834,12 +834,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="card" style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', padding: '1.5rem' }}>
-            <h4 style={{ margin: '0 0 0.5rem 0', color: '#166534', fontSize: '1.1rem', fontWeight: 700 }}>👉 G Shift Overlap Utilization Insight</h4>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#14532D', lineHeight: 1.5 }}>
-              The overlapping **G Shift** contribution has cleared **{shiftAnalysis.gShiftContribution} tasks** today. G Shift acts as the primary defense against Carry-forward backlogs accumulating across A, B, and C shifts, ensuring smooth shift transitions with zero compliance fallout.
-            </p>
-          </div>
         </div>
       )}
 
@@ -1382,11 +1376,16 @@ const Dashboard = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', fontWeight: 800 }}><Activity color="#EF4444" /> Long-Tail Aging Decomposition Matrix</h3>
             </div>
+            
+            <div style={{ fontSize: '0.85rem', color: '#64748B', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.25rem', lineHeight: 1.4 }}>
+              ℹ️ <strong>Performance Analysis Guidance:</strong> Aging reports represent pending operational cycles. <strong>Lower Aging Days are better</strong> (indicating agile task closure), while <strong>Higher Waiting Days are worst</strong> (signifying stagnant work-in-progress and risk).
+            </div>
+
             {(() => {
               const map = {};
               rawData.filter(r => r.Status !== 'Done').forEach(r => {
                 const key = `${r.Activity_Description || 'Unk'} @ ${r.Component || 'Unk'}`;
-                if(!map[key]) map[key] = { desc: r.Activity_Description, comp: r.Component, freq: r.Frequency, line: r.Line_Equipment, type: r.Type_of_Activity, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 };
+                if(!map[key]) map[key] = { desc: r.Activity_Description, comp: r.Component, freq: r.Frequency, line: r.Line_Equipment, subLine: r.Sub_Line_Equipment, type: r.Type_of_Activity, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 };
                 const diffHrs = (new Date() - new Date(r.Date_Timestamp || r.Date)) / 36e5;
                 if (diffHrs < 8) map[key].s1++;
                 else if (diffHrs < 168) map[key].s2++; // 7 Days
@@ -1414,7 +1413,7 @@ const Dashboard = () => {
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                             <div>
                               <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1E293B' }}>{row.comp}</div>
-                              <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{row.line} • {row.type}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{row.line} • {row.subLine || 'No Subline'} • {row.type}</div>
                             </div>
                             <span style={{ 
                               padding: '0.25rem 0.5rem', borderRadius: '6px', fontSize: '0.65rem', fontWeight: 800, color: '#FFF',
@@ -1444,8 +1443,10 @@ const Dashboard = () => {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '2px solid #E2E8F0' }}>
-                        <th style={{ padding: '0.8rem 1rem' }}>Activity Hierarchy</th>
-                        <th style={{ padding: '0.8rem 1rem' }}>Origin Line</th>
+                        <th style={{ padding: '0.8rem 1rem' }}>Line Equipment</th>
+                        <th style={{ padding: '0.8rem 1rem' }}>Sub-Line Equipment</th>
+                        <th style={{ padding: '0.8rem 1rem' }}>Component</th>
+                        <th style={{ padding: '0.8rem 1rem' }}>Activity Description</th>
                         <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem', borderLeft: '1px solid #F1F5F9' }}>{'< 8 HR'}</th>
                         <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'1-7 DAY'}</th>
                         <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'8-30 DAY'}</th>
@@ -1460,12 +1461,11 @@ const Dashboard = () => {
                         const isSevere = row.s3 > 0;
                         return (
                           <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                            <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#1E293B' }}>{row.line || '-'}</td>
+                            <td style={{ padding: '0.75rem 1rem', color: '#475569' }}>{row.subLine || '-'}</td>
+                            <td style={{ padding: '0.75rem 1rem', color: '#475569', fontWeight: 600 }}>{row.comp || '-'}</td>
                             <td style={{ padding: '0.75rem 1rem' }}>
-                              <strong style={{ color: '#1E293B' }}>{row.comp}</strong>
-                              <div style={{ fontSize: '0.65rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{row.desc}</div>
-                            </td>
-                            <td style={{ padding: '0.75rem 1rem' }}>
-                              <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600 }}>{row.line}</span>
+                              <div style={{ fontSize: '0.8rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }} title={row.desc}>{row.desc}</div>
                               <div style={{ fontSize: '0.65rem', color: '#94A3B8' }}>{row.type} • {row.freq}</div>
                             </td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s1 ? '#64748B' : '#E2E8F0', fontWeight: row.s1 ? 700 : 400, borderLeft: '1px solid #F8FAFC' }}>{row.s1 || '-'}</td>

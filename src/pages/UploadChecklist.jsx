@@ -260,48 +260,66 @@ const UploadChecklist = () => {
               )}
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', alignItems: 'end' }}>
               {/* Search Bar */}
-              <div style={{ position: 'relative' }}>
-                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
-                <input 
-                  type="text" 
-                  value={filterText} 
-                  onChange={e => setFilterText(e.target.value)} 
-                  placeholder="Search Desc / Doc / Rev..." 
-                  style={{ width: '100%', padding: '0.5rem 0.75rem 0.5rem 2.25rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }} 
-                />
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>SEARCH CRITERIA</label>
+                <div style={{ position: 'relative' }}>
+                  <Search size={15} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+                  <input 
+                    type="text" 
+                    value={filterText} 
+                    onChange={e => setFilterText(e.target.value)} 
+                    placeholder="Desc / Doc / Rev..." 
+                    style={{ width: '100%', padding: '0.45rem 0.5rem 0.45rem 2rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem' }} 
+                  />
+                </div>
               </div>
 
               {/* Type Filter */}
-              <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }}>
-                <option value="">All Activity Types</option>
-                {activityTypes.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>ACTIVITY TYPE</label>
+                <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ width: '100%', padding: '0.45rem 0.5rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem' }}>
+                  <option value="">All Activity Types</option>
+                  {activityTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
 
               {/* Line Filter */}
-              <select value={filterLine} onChange={e => { setFilterLine(e.target.value); setFilterSubLine(''); }} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }}>
-                <option value="">All Lines</option>
-                {lines.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>LINE EQUIPMENT</label>
+                <select value={filterLine} onChange={e => { setFilterLine(e.target.value); setFilterSubLine(''); }} style={{ width: '100%', padding: '0.45rem 0.5rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem' }}>
+                  <option value="">All Lines</option>
+                  {lines.map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </div>
 
               {/* Sub-Line Filter */}
-              <select value={filterSubLine} onChange={e => setFilterSubLine(e.target.value)} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }}>
-                <option value="">All Sub-Lines</option>
-                {subLines.map(sl => <option key={sl} value={sl}>{sl}</option>)}
-              </select>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>SUB-LINE EQUIPMENT</label>
+                <select value={filterSubLine} onChange={e => setFilterSubLine(e.target.value)} style={{ width: '100%', padding: '0.45rem 0.5rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem' }}>
+                  <option value="">All Sub-Lines</option>
+                  {subLines.map(sl => <option key={sl} value={sl}>{sl}</option>)}
+                </select>
+              </div>
 
               {/* Component Filter */}
-              <select value={filterComponent} onChange={e => setFilterComponent(e.target.value)} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }}>
-                <option value="">All Components</option>
-                {components.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>COMPONENT</label>
+                <select value={filterComponent} onChange={e => setFilterComponent(e.target.value)} style={{ width: '100%', padding: '0.45rem 0.5rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem' }}>
+                  <option value="">All Components</option>
+                  {components.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
 
               {/* Frequency Filter */}
-              <select value={filterFrequency} onChange={e => setFilterFrequency(e.target.value)} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8125rem' }}>
-                <option value="">All Frequencies</option>
-                {dynamicFreqs.map(f => <option key={f} value={f}>{f}</option>)}
-              </select>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>FREQUENCY</label>
+                <select value={filterFrequency} onChange={e => setFilterFrequency(e.target.value)} style={{ width: '100%', padding: '0.45rem 0.5rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem' }}>
+                  <option value="">All Frequencies</option>
+                  {dynamicFreqs.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 

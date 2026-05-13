@@ -174,6 +174,37 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
     return { shiftCOverlapCount, stuckCount };
   }, [submissions]);
 
+  // 8b. LAGGING ACTIVITIES (BACKWARD HIERARCHY PENDING CLUSTERS)
+  const laggingActivities = useMemo(() => {
+    const map = {};
+    submissions.forEach(s => {
+      const key = `${s.Type_of_Activity}|${s.Line_Equipment}|${s.Sub_Line_Equipment}|${s.Component}|${s.Activity_Description}`.toLowerCase().trim();
+      if (!map[key]) {
+        map[key] = { 
+          type: s.Type_of_Activity || 'Unspecified Type',
+          line: s.Line_Equipment || 'Unspecified Line',
+          subLine: s.Sub_Line_Equipment || 'Unspecified Sub-line',
+          comp: s.Component || 'Unspecified Component',
+          desc: s.Activity_Description || 'Unspecified Activity',
+          total: 0,
+          done: 0
+        };
+      }
+      map[key].total++;
+      if (s.Status === 'Done') map[key].done++;
+    });
+
+    return Object.values(map)
+      .map(item => {
+        const pendingCount = item.total - item.done;
+        const failPct = Math.round((pendingCount / item.total) * 100);
+        return { ...item, pendingCount, failPct };
+      })
+      .filter(item => item.failPct > 30 && item.total > 1)
+      .sort((a, b) => b.failPct - a.failPct || b.pendingCount - a.pendingCount)
+      .slice(0, 5);
+  }, [submissions]);
+
   // 9. GLOBAL KPI SUMMARY
   const globalKPI = useMemo(() => {
     const done = submissions.filter(s => s.Status === 'Done').length;
@@ -193,6 +224,93 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
 
   const cardHeaderStyle = { display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid #F1F5F9', paddingBottom: '0.75rem', color: '#1E293B' };
   const subTitleStyle = { fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 600, color: '#64748B', letterSpacing: '0.05em', display: 'block', marginBottom: '0.25rem' };
+
+  // Helper Component for Shuffling Frequency Trend Line Graphs
+  const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon }) => {
+    const [activeFreq, setActiveFreq] = useState('ALL');
+
+    const trend = useMemo(() => {
+      const dates = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (6 - i));
+        return d.toISOString().split('T')[0];
+      });
+
+      let source = submissions;
+      if (activeFreq && activeFreq !== 'ALL') {
+        source = source.filter(s => 
+          String(s.Frequency || '').trim().toLowerCase() === activeFreq.trim().toLowerCase()
+        );
+      }
+
+      const counts = {};
+      source.forEach(s => {
+        const val = s[pivotKey];
+        if (val && val !== '-' && val !== 'Unknown') counts[val] = (counts[val] || 0) + 1;
+      });
+      const topEntities = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(e => e[0]);
+
+      const chartData = dates.map(dt => {
+        const dayLogs = source.filter(s => {
+          const checkDate = (s.Date_Timestamp || s.Date || '').split('T')[0];
+          return checkDate === dt;
+        });
+        const label = dt.split('-').reverse().join('/');
+        const row = { name: label };
+        topEntities.forEach(ent => {
+          row[ent] = dayLogs.filter(l => l[pivotKey] === ent && l.Status === 'Done').length;
+        });
+        return row;
+      });
+
+      return { chartData, topEntities };
+    }, [activeFreq, submissions]);
+
+    return (
+      <div className="card" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>
+            {Icon && <Icon size={16} color="#6366F1" />} {title}
+          </div>
+          <select 
+            value={activeFreq} 
+            onChange={e => setActiveFreq(e.target.value)}
+            style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', borderRadius: '6px', border: '1px solid #CBD5E1', cursor: 'pointer', outline: 'none', fontWeight: 600, backgroundColor: '#FFF' }}
+          >
+            <option value="ALL">Freq: ALL</option>
+            <option value="Daily">Daily</option>
+            <option value="Shift-wise">Shift-wise</option>
+            <option value="Weekly">Weekly</option>
+            <option value="Monthly">Monthly</option>
+          </select>
+        </div>
+        
+        {trend.topEntities.length === 0 ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', fontSize: '0.8rem', fontStyle: 'italic' }}>
+            No trend data identified for selected filters.
+          </div>
+        ) : (
+          <div style={{ height: '220px', width: '100%' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trend.chartData} margin={{ top: 5, right: 10, left: -30, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                <XAxis dataKey="name" fontSize={9} tickLine={false} axisLine={false} />
+                <YAxis fontSize={9} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '8px' }} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '9px', paddingTop: '10px' }} />
+                {trend.topEntities.map((ent, i) => (
+                  <Line key={ent} type="monotone" dataKey={ent} stroke={COLORS[i % COLORS.length]} strokeWidth={2.5} dot={{ r: 2 }} activeDot={{ r: 4 }} name={ent} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', paddingBottom: '3rem' }}>
@@ -322,6 +440,42 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
             </div>
           )}
         </div>
+
+        {/* Backward Hierarchy Worst Offenders Highlighting */}
+        {laggingActivities.length > 0 && (
+          <div className="card" style={{ marginTop: '1.5rem', border: '1.5px solid #FCA5A5', backgroundColor: '#FFF5F5' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#B91C1C', fontWeight: 800, fontSize: '0.95rem', marginBottom: '0.75rem' }}>
+              <AlertTriangle size={18} color="#DC2626" /> ⚠️ High Risk Operations Spotlight (Worst-Performing Activity Clusters)
+            </div>
+            <p style={{ margin: '0 0 1rem 0', fontSize: '0.8rem', color: '#991B1B', lineHeight: 1.4 }}>
+              The following critical activities fail verification checks or remain pending on a <strong>majority of occasions</strong> (>30% Fail Rate). Immediate engineering or supervisory audit is required.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              {laggingActivities.map((act, i) => (
+                <div key={i} style={{ display: 'flex', gap: '0.8rem', backgroundColor: '#FFF', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #FEE2E2', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: '250px' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1E293B' }}>{act.desc}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.25rem', flexWrap: 'wrap', fontSize: '0.7rem' }}>
+                      <span style={{ color: '#DC2626', fontWeight: 700 }}>BACKWARD HIERARCHY:</span>
+                      <span style={{ color: '#475569', fontWeight: 600 }}>{act.line}</span>
+                      <span style={{ color: '#94A3B8' }}>❯</span>
+                      <span style={{ color: '#475569' }}>{act.subLine}</span>
+                      <span style={{ color: '#94A3B8' }}>❯</span>
+                      <span style={{ color: '#475569', fontStyle: 'italic' }}>{act.comp}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#B91C1C' }}>{act.failPct}% Non-Done</div>
+                      <div style={{ fontSize: '0.65rem', color: '#64748B' }}>{act.pendingCount} of {act.total} tasks missed</div>
+                    </div>
+                    <span style={{ backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', color: '#B91C1C', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 800 }}>AUDIT REQUIRED</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ================= TREND ANALYTICS ENGINE (MULTI-PIVOT) ================= */}
@@ -530,25 +684,20 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
           </div>
         </div>
 
-        {/* High Value Exception Analytics */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
-          <div className="card" style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#475569', fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.5rem' }}><FileClock size={16} /> Production Day Accuracy Check</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{exceptionStats.shiftCOverlapCount}</div>
-            <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Entries mapped from Shift C crossover (00:00 - 05:59) back to prior Production Date</div>
-          </div>
+      </div>
 
-          <div className="card" style={{ backgroundColor: '#F0FDF4', border: '1px solid #DCFCE7' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#166534', fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.5rem' }}><ShieldCheck size={16} /> Frequency Master Validation</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#16A34A' }}>PASSED</div>
-            <div style={{ fontSize: '0.75rem', color: '#15803D' }}>All scheduled checkpoints correctly locked to production shift starts</div>
-          </div>
+      {/* ================= LEVEL 4: GRANULAR MULTI-DIMENSION DAILY TRENDS ================= */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <TrendingUp size={22} fill="#6366F1" color="#6366F1" />
+          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>LEVEL 4: Multi-Dimension Completion Performance (7-Day Trend)</h2>
+        </div>
 
-          <div className="card" style={{ backgroundColor: '#FFF1F2', border: '1px solid #FFE4E6' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#9F1239', fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.5rem' }}><AlertTriangle size={16} /> Abnormal Processing Alert</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#E11D48' }}>{exceptionStats.stuckCount}</div>
-            <div style={{ fontSize: '0.75rem', color: '#BE123C' }}>Stuck / Abandoned "WIP" tasks currently logged. Review immediately.</div>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem' }}>
+          <DynamicDimensionTrend title="Daily Trend: Type of Activity" pivotKey="Type_of_Activity" icon={Activity} />
+          <DynamicDimensionTrend title="Daily Trend: Line Equipment" pivotKey="Line_Equipment" icon={Layers} />
+          <DynamicDimensionTrend title="Daily Trend: Sub-Line Equipment" pivotKey="Sub_Line_Equipment" icon={Map} />
+          <DynamicDimensionTrend title="Daily Trend: Components" pivotKey="Component" icon={Settings} />
         </div>
       </div>
     </div>

@@ -10,6 +10,24 @@ const PhotoLightbox = ({ src, onClose }) => (
   </div>
 );
 
+const formatDateDDMMYYYY = (dateStr) => {
+  if (!dateStr || dateStr === '-') return '-';
+  const clean = String(dateStr).split('T')[0];
+  if (clean.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    return clean.split('-').reverse().join('/');
+  }
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  } catch (e) {
+    return dateStr;
+  }
+};
+
 const SupportInbox = () => {
   const { user } = useAuth();
   const { supportInbox = [], updateFirebase, employees = [], submissions = [], reviewers = [], logs = [] } = useData();
@@ -841,8 +859,8 @@ const SupportInbox = () => {
 
       {/* Review Inbox Filters */}
       {activeTab === 'review_inbox' && (
-        <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
-          <div style={{ width: '100%', borderBottom: '1px solid var(--border-color)', marginBottom: '0.5rem', display: 'flex', gap: '1.25rem', paddingBottom: '0.6rem' }}>
+        <div className="card" style={{ backgroundColor: '#F8FAFC', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+          <div style={{ width: '100%', borderBottom: '1px solid var(--border-color)', marginBottom: '1rem', display: 'flex', gap: '1.25rem', paddingBottom: '0.6rem' }}>
             <button 
               onClick={() => { setRevViewMode('summary'); setExpandedReviewGroup(null); }}
               style={{ background: 'none', border: 'none', borderBottom: revViewMode === 'summary' ? '2px solid var(--primary-light)' : 'none', color: revViewMode === 'summary' ? 'var(--primary-light)' : 'var(--text-secondary)', fontWeight: revViewMode === 'summary' ? 700 : 500, fontSize: '0.85rem', cursor: 'pointer', paddingBottom: '0.2rem', marginBottom: '-0.7rem', transition: 'all 0.2s' }}
@@ -857,249 +875,253 @@ const SupportInbox = () => {
             </button>
           </div>
           
-          <div style={{ width: '200px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Line / Equipment</label>
-            <select 
-              value={revLineFilter} 
-              onChange={e => setRevLineFilter(e.target.value)} 
-              className="select-input" 
-              style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem', width: '100%' }}
-            >
-              <option value="all">All My Assigned Lines</option>
-              {reviewerLines.map(line => <option key={line} value={line}>{line}</option>)}
-            </select>
-          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', alignItems: 'end' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>LINE / EQUIPMENT</label>
+              <select 
+                value={revLineFilter} 
+                onChange={e => setRevLineFilter(e.target.value)} 
+                className="select-input" 
+                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+              >
+                <option value="all">All My Assigned Lines</option>
+                {reviewerLines.map(line => <option key={line} value={line}>{line}</option>)}
+              </select>
+            </div>
 
-          <div style={{ width: '150px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Frequency</label>
-            <select 
-              value={revFreqFilter} 
-              onChange={e => setRevFreqFilter(e.target.value)} 
-              className="select-input" 
-              style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem', width: '100%' }}
-            >
-              <option value="all">All Frequencies</option>
-              {['Daily', 'Shift-wise', 'Weekly', 'Monthly'].map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
-          </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>FREQUENCY</label>
+              <select 
+                value={revFreqFilter} 
+                onChange={e => setRevFreqFilter(e.target.value)} 
+                className="select-input" 
+                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+              >
+                <option value="all">All Frequencies</option>
+                {['Daily', 'Shift-wise', 'Weekly', 'Monthly'].map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
 
-          <div style={{ width: '150px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Activity Type</label>
-            <select 
-              value={revTypeFilter} 
-              onChange={e => setRevTypeFilter(e.target.value)} 
-              className="select-input" 
-              style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem', width: '100%' }}
-            >
-              {activityTypes.map(type => (
-                <option key={type} value={type}>{type === 'all' ? 'All Activities' : type}</option>
-              ))}
-            </select>
-          </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>ACTIVITY TYPE</label>
+              <select 
+                value={revTypeFilter} 
+                onChange={e => setRevTypeFilter(e.target.value)} 
+                className="select-input" 
+                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+              >
+                {activityTypes.map(type => (
+                  <option key={type} value={type}>{type === 'all' ? 'All Activities' : type}</option>
+                ))}
+              </select>
+            </div>
 
-          <div style={{ width: '150px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Review Status</label>
-            <select 
-              value={revStatusFilter} 
-              onChange={e => setRevStatusFilter(e.target.value)} 
-              className="select-input" 
-              style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem', width: '100%' }}
-            >
-              <option value="all">All Status</option>
-              <option value="Pending">Pending Review</option>
-              <option value="Approved">Approved</option>
-              <option value="Needs Correction">Needs Correction</option>
-            </select>
-          </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>REVIEW STATUS</label>
+              <select 
+                value={revStatusFilter} 
+                onChange={e => setRevStatusFilter(e.target.value)} 
+                className="select-input" 
+                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+              >
+                <option value="all">All Status</option>
+                <option value="Pending">Pending Review</option>
+                <option value="Approved">Approved</option>
+                <option value="Needs Correction">Needs Correction</option>
+              </select>
+            </div>
 
-          <button 
-            onClick={() => { setRevFreqFilter('all'); setRevTypeFilter('all'); setRevLineFilter('all'); setRevStatusFilter('all'); }}
-            style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}
-          >
-            Reset Filters
-          </button>
+            <button 
+              onClick={() => { setRevFreqFilter('all'); setRevTypeFilter('all'); setRevLineFilter('all'); setRevStatusFilter('all'); }}
+              style={{ height: '34px', padding: '0 1rem', fontSize: '0.75rem', color: '#EF4444', border: '1px dashed #FCA5A5', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', background: '#FEF2F2' }}
+            >
+              Reset Filters
+            </button>
+          </div>
         </div>
       )}
 
       {/* Submission Logs Filters */}
       {activeTab === 'submission_logs' && (
-        <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
-          <div style={{ flex: 1, minWidth: '150px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Description Search</label>
-            <input 
-              type="text" 
-              placeholder="Search description..." 
-              value={logDescFilter} 
-              onChange={e => setLogDescFilter(e.target.value)} 
-              className="login-input" 
-              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
-            />
-          </div>
+        <div className="card" style={{ backgroundColor: '#F8FAFC', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', alignItems: 'end' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>DESCRIPTION SEARCH</label>
+              <input 
+                type="text" 
+                placeholder="Search description..." 
+                value={logDescFilter} 
+                onChange={e => setLogDescFilter(e.target.value)} 
+                className="login-input" 
+                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }} 
+              />
+            </div>
 
-          <div style={{ width: '150px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Activity Type</label>
-            <select 
-              value={logActivityTypeFilter} 
-              onChange={e => setLogActivityTypeFilter(e.target.value)} 
-              className="select-input" 
-              style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem' }}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>ACTIVITY TYPE</label>
+              <select 
+                value={logActivityTypeFilter} 
+                onChange={e => setLogActivityTypeFilter(e.target.value)} 
+                className="select-input" 
+                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+              >
+                {activityTypes.map(type => (
+                  <option key={type} value={type}>{type === 'all' ? 'All Activities' : type}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>SHIFT</label>
+              <select 
+                value={logShiftFilter} 
+                onChange={e => setLogShiftFilter(e.target.value)} 
+                className="select-input" 
+                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+              >
+                <option value="all">All Shifts</option>
+                <option value="A">Shift A</option>
+                <option value="B">Shift B</option>
+                <option value="C">Shift C</option>
+                <option value="G">Shift G</option>
+                <option value="Gen">Gen</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>DOC NUMBER</label>
+              <input 
+                type="text" 
+                placeholder="Doc No..." 
+                value={logDocFilter} 
+                onChange={e => setLogDocFilter(e.target.value)} 
+                className="login-input" 
+                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }} 
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>SUBMITTED BY</label>
+              <input 
+                type="text" 
+                placeholder="Name or ID..." 
+                value={logSubmittedByFilter} 
+                onChange={e => setLogSubmittedByFilter(e.target.value)} 
+                className="login-input" 
+                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }} 
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>LINE</label>
+              <input 
+                type="text" 
+                placeholder="Line..." 
+                value={logLineFilter} 
+                onChange={e => setLogLineFilter(e.target.value)} 
+                className="login-input" 
+                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }} 
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>SUB-LINE</label>
+              <input 
+                type="text" 
+                placeholder="Sub-Line..." 
+                value={logSubLineFilter} 
+                onChange={e => setLogSubLineFilter(e.target.value)} 
+                className="login-input" 
+                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }} 
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>COMPONENT</label>
+              <input 
+                type="text" 
+                placeholder="Component..." 
+                value={logComponentFilter} 
+                onChange={e => setLogComponentFilter(e.target.value)} 
+                className="login-input" 
+                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }} 
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>FREQUENCY</label>
+              <select 
+                value={logFreqFilter} 
+                onChange={e => setLogFreqFilter(e.target.value)} 
+                className="select-input" 
+                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+              >
+                <option value="all">All Frequencies</option>
+                <option value="daily">Daily</option>
+                <option value="shift">Shift</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>STATUS</label>
+              <select 
+                value={logStatusFilter} 
+                onChange={e => setLogStatusFilter(e.target.value)} 
+                className="select-input" 
+                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+              >
+                <option value="all">All Status</option>
+                <option value="done">Done</option>
+                <option value="wip">In Progress</option>
+                <option value="hold">Hold</option>
+                <option value="support required">Support Required</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>START DATE</label>
+              <input 
+                type="date" 
+                value={logStartDate} 
+                onChange={e => setLogStartDate(e.target.value)} 
+                className="login-input" 
+                style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem', width: '100%' }} 
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>END DATE</label>
+              <input 
+                type="date" 
+                value={logEndDate} 
+                onChange={e => setLogEndDate(e.target.value)} 
+                className="login-input" 
+                style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem', width: '100%' }} 
+              />
+            </div>
+
+            <button 
+              onClick={() => { 
+                setLogStartDate(''); 
+                setLogEndDate(''); 
+                setLogShiftFilter('all'); 
+                setLogDocFilter(''); 
+                setLogSubmittedByFilter(''); 
+                setLogDescFilter(''); 
+                setLogActivityTypeFilter('all'); 
+                setLogLineFilter(''); 
+                setLogSubLineFilter(''); 
+                setLogComponentFilter(''); 
+                setLogFreqFilter('all'); 
+                setLogStatusFilter('all');
+              }}
+              style={{ height: '34px', padding: '0 1rem', fontSize: '0.75rem', color: '#EF4444', border: '1px dashed #FCA5A5', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', background: '#FEF2F2' }}
             >
-              {activityTypes.map(type => (
-                <option key={type} value={type}>{type === 'all' ? 'All Activities' : type}</option>
-              ))}
-            </select>
+              Reset Filters
+            </button>
           </div>
-
-          <div style={{ width: '130px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Shift</label>
-            <select 
-              value={logShiftFilter} 
-              onChange={e => setLogShiftFilter(e.target.value)} 
-              className="select-input" 
-              style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem' }}
-            >
-              <option value="all">All Shifts</option>
-              <option value="A">Shift A</option>
-              <option value="B">Shift B</option>
-              <option value="C">Shift C</option>
-              <option value="G">Shift G</option>
-              <option value="Gen">Gen</option>
-            </select>
-          </div>
-
-          <div style={{ width: '130px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Doc Number</label>
-            <input 
-              type="text" 
-              placeholder="Doc No..." 
-              value={logDocFilter} 
-              onChange={e => setLogDocFilter(e.target.value)} 
-              className="login-input" 
-              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
-            />
-          </div>
-
-          <div style={{ width: '130px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Submitted By</label>
-            <input 
-              type="text" 
-              placeholder="Name or ID..." 
-              value={logSubmittedByFilter} 
-              onChange={e => setLogSubmittedByFilter(e.target.value)} 
-              className="login-input" 
-              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
-            />
-          </div>
-
-          <div style={{ width: '130px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Line</label>
-            <input 
-              type="text" 
-              placeholder="Line..." 
-              value={logLineFilter} 
-              onChange={e => setLogLineFilter(e.target.value)} 
-              className="login-input" 
-              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
-            />
-          </div>
-
-          <div style={{ width: '130px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Sub-Line</label>
-            <input 
-              type="text" 
-              placeholder="Sub-Line..." 
-              value={logSubLineFilter} 
-              onChange={e => setLogSubLineFilter(e.target.value)} 
-              className="login-input" 
-              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
-            />
-          </div>
-
-          <div style={{ width: '130px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Component</label>
-            <input 
-              type="text" 
-              placeholder="Component..." 
-              value={logComponentFilter} 
-              onChange={e => setLogComponentFilter(e.target.value)} 
-              className="login-input" 
-              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} 
-            />
-          </div>
-
-          <div style={{ width: '130px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Freq.</label>
-            <select 
-              value={logFreqFilter} 
-              onChange={e => setLogFreqFilter(e.target.value)} 
-              className="select-input" 
-              style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem' }}
-            >
-              <option value="all">All Freq.</option>
-              <option value="daily">Daily</option>
-              <option value="shift">Shift</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-          </div>
-
-          <div style={{ width: '130px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Status</label>
-            <select 
-              value={logStatusFilter} 
-              onChange={e => setLogStatusFilter(e.target.value)} 
-              className="select-input" 
-              style={{ padding: '0.4rem 0.5rem', fontSize: '0.875rem' }}
-            >
-              <option value="all">All Status</option>
-              <option value="done">Done</option>
-              <option value="wip">In Progress</option>
-              <option value="hold">Hold</option>
-              <option value="support required">Support Required</option>
-            </select>
-          </div>
-
-          <div style={{ width: '140px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Start Date</label>
-            <input 
-              type="date" 
-              value={logStartDate} 
-              onChange={e => setLogStartDate(e.target.value)} 
-              className="login-input" 
-              style={{ padding: '0.35rem 0.5rem', fontSize: '0.875rem' }} 
-            />
-          </div>
-
-          <div style={{ width: '140px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>End Date</label>
-            <input 
-              type="date" 
-              value={logEndDate} 
-              onChange={e => setLogEndDate(e.target.value)} 
-              className="login-input" 
-              style={{ padding: '0.35rem 0.5rem', fontSize: '0.875rem' }} 
-            />
-          </div>
-
-          <button 
-            onClick={() => { 
-              setLogStartDate(''); 
-              setLogEndDate(''); 
-              setLogShiftFilter('all'); 
-              setLogDocFilter(''); 
-              setLogSubmittedByFilter(''); 
-              setLogDescFilter(''); 
-              setLogActivityTypeFilter('all'); 
-              setLogLineFilter(''); 
-              setLogSubLineFilter(''); 
-              setLogComponentFilter(''); 
-              setLogFreqFilter('all'); 
-              setLogStatusFilter('all');
-            }}
-            style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}
-          >
-            Reset Filters
-          </button>
         </div>
       )}
 
@@ -1191,7 +1213,7 @@ const SupportInbox = () => {
                     const getStatusColor = (s) => ({ 'Pending': '#94A3B8', 'Done': '#10B981', 'WIP': '#F59E0B', 'Hold': '#64748B', 'Postponed': '#8B5CF6', 'Support Required': '#EF4444' }[s] || '#94A3B8');
                     return (
                       <tr key={sub.id || i} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'transparent' }}>
-                        <td style={{ padding: '0.75rem 1rem' }}>{sub.Date || '-'}</td>
+                        <td style={{ padding: '0.75rem 1rem' }}>{formatDateDDMMYYYY(sub.Date)}</td>
                         <td style={{ padding: '0.75rem 1rem' }}>{sub.Shift || 'Gen'}</td>
                         <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--primary-dark)' }}>{sub.Type_of_Activity || '-'}</td>
                         <td style={{ padding: '0.75rem 1rem' }}>{sub.Component || '-'}</td>
@@ -1255,7 +1277,7 @@ const SupportInbox = () => {
                         <React.Fragment key={group.key || idx}>
                           <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: isExpanded ? '#F8FAFC' : 'transparent' }}>
                             <td style={{ padding: '0.75rem 1rem' }}>
-                              <div style={{ fontWeight: 700 }}>{group.date}</div>
+                              <div style={{ fontWeight: 700 }}>{formatDateDDMMYYYY(group.date)}</div>
                               <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Shift: {group.shift}</div>
                             </td>
                             <td style={{ padding: '0.75rem 1rem' }}>
@@ -1308,7 +1330,7 @@ const SupportInbox = () => {
                               <td colSpan={5} style={{ padding: '1rem 1.5rem', borderLeft: '4px solid var(--primary-light)' }}>
                                 <div style={{ backgroundColor: '#FFF', borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                                   <div style={{ backgroundColor: '#F1F5F9', padding: '0.6rem 0.8rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontWeight: 700, fontSize: '0.75rem', color: 'var(--text-primary)' }}>📑 Activity Drill Down — {group.line} ({group.date})</span>
+                                    <span style={{ fontWeight: 700, fontSize: '0.75rem', color: 'var(--text-primary)' }}>📑 Activity Drill Down — {group.line} ({formatDateDDMMYYYY(group.date)})</span>
                                     <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{group.items.length} Submissions</span>
                                   </div>
                                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
@@ -1389,7 +1411,7 @@ const SupportInbox = () => {
                       return (
                         <tr key={subKey || i} style={{ borderBottom: '1px solid var(--border-color)' }}>
                           <td style={{ padding: '0.75rem 1rem' }}>
-                            <div style={{ fontWeight: 600 }}>{sub.Date || '-'}</div>
+                            <div style={{ fontWeight: 600 }}>{formatDateDDMMYYYY(sub.Date)}</div>
                             <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem' }}>{sub.Frequency || 'Daily'} • Shift {sub.Shift || 'Gen'}</div>
                           </td>
                           <td style={{ padding: '0.75rem 1rem' }}>

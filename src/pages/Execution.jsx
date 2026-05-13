@@ -380,15 +380,23 @@ const Execution = () => {
   };
 
   const handleSubmitAll = async () => {
-    if (filteredChecklists.length === 0) return;
+    const submittedItems = filteredChecklists.filter(c => {
+      const s = statusUpdates[c.id] || 'Pending';
+      return s !== 'Pending';
+    });
+    
+    if (submittedItems.length === 0) {
+      alert("Please update at least one activity status to non-Pending before submitting.");
+      return;
+    }
+
+    const confirmSubmit = window.confirm(`Confirm Submission: Are you sure you want to save these ${submittedItems.length} activity record(s)?`);
+    if (!confirmSubmit) return;
+
     setIsSubmitting(true);
     const now = new Date();
 
     try {
-      const submittedItems = filteredChecklists.filter(c => {
-        const s = statusUpdates[c.id] || 'Pending';
-        return s !== 'Pending';
-      });
 
       const currentShiftId = getCurrentShift(shiftMaster) || 'General';
       const productionDate = getProductionDate(now, shiftMaster);
@@ -628,8 +636,8 @@ const Execution = () => {
 
                   {/* Component & Description */}
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{chk.Component}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>{chk.Activity_Description}</div>
+                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--primary-dark)' }}>{chk.Activity_Description}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem', fontWeight: 600 }}>Component: {chk.Component}</div>
                   </div>
 
                   {/* Location info */}
@@ -741,8 +749,8 @@ const Execution = () => {
                       <tr style={{ borderBottom: isSupport ? 'none' : '1px solid var(--border-color)', backgroundColor: isSupport ? '#FFF5F5' : 'transparent' }}>
                         <td style={{ padding: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>{idx + 1}</td>
                         <td style={{ padding: '0.75rem' }}>
-                          <div style={{ fontWeight: 600 }}>{chk.Component}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>{chk.Activity_Description}</div>
+                          <div style={{ fontWeight: 800, color: 'var(--primary-dark)' }}>{chk.Activity_Description}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.15rem', fontWeight: 600 }}>Component: {chk.Component}</div>
                         </td>
                         <td style={{ padding: '0.75rem' }}>
                           <div>{chk.Line_Equipment}</div>
