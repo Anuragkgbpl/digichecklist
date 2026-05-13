@@ -1,13 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { FileClock, Search, List, ShieldCheck, Download } from 'lucide-react';
+import { FileClock, Search, List, ShieldCheck, Download, Camera, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
+
+const PhotoLightbox = ({ src, onClose }) => (
+  <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <button onClick={onClose} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
+    <img src={src} alt="Uploaded Proof" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: '8px', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()} />
+  </div>
+);
 
 const Logs = () => {
   const { submissions: cloudSubmissions, logs: cloudLogs } = useData();
   const [submissions, setSubmissions] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [activeTab, setActiveTab] = useState('submissions');
+  const [lightboxPhoto, setLightboxPhoto] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Advanced filters for submissions
@@ -191,6 +199,7 @@ const Logs = () => {
                   <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Review Status</th>
                   <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Reviewed By</th>
                   <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Remarks</th>
+                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Photo</th>
                 </tr>
               ) : (
                 <tr style={{ color: 'var(--text-secondary)' }}>
@@ -235,6 +244,19 @@ const Logs = () => {
                   </td>
                   <td style={{ padding: '0.75rem 1rem' }}>{sub.Reviewed_By || '-'}</td>
                   <td style={{ padding: '0.75rem 1rem', fontStyle: 'italic', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={sub.Review_Remarks}>{sub.Review_Remarks || '-'}</td>
+                  <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                    {sub.Photo ? (
+                      <button 
+                        onClick={() => setLightboxPhoto(sub.Photo)}
+                        style={{ background: 'none', border: 'none', color: 'var(--primary-light)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+                        title="View Proof Photo"
+                      >
+                        <Camera size={18} />
+                      </button>
+                    ) : (
+                      <span style={{ color: '#CBD5E1' }}>-</span>
+                    )}
+                  </td>
                 </tr>
               ))}
 
@@ -258,6 +280,7 @@ const Logs = () => {
           </table>
         </div>
       </div>
+      {lightboxPhoto && <PhotoLightbox src={lightboxPhoto} onClose={() => setLightboxPhoto(null)} />}
     </div>
   );
 };

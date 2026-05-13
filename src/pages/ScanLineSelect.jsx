@@ -57,7 +57,7 @@ const ScanLineSelect = () => {
     // 2. If Line is selected, filter subline options
     let lineFiltered = relevant;
     if (selectedLine) {
-      lineFiltered = relevant.filter(c => c.Line_Equipment === selectedLine);
+      lineFiltered = relevant.filter(c => String(c.Line_Equipment || '').trim().toLowerCase() === String(selectedLine).trim().toLowerCase());
     }
     const uniqueSubs = [...new Set(lineFiltered.map(c => c.Sub_Line_Equipment).filter(Boolean))];
     setSubLines(uniqueSubs);
@@ -65,7 +65,7 @@ const ScanLineSelect = () => {
     // 3. Filter component options
     let subLineFiltered = lineFiltered;
     if (selectedSubLine) {
-      subLineFiltered = lineFiltered.filter(c => c.Sub_Line_Equipment === selectedSubLine);
+      subLineFiltered = lineFiltered.filter(c => String(c.Sub_Line_Equipment || '').trim().toLowerCase() === String(selectedSubLine).trim().toLowerCase());
     }
     const uniqueComps = [...new Set(subLineFiltered.map(c => c.Component).filter(Boolean))];
     setComponents(uniqueComps);
@@ -75,8 +75,8 @@ const ScanLineSelect = () => {
   const handleLineSelect = (line) => {
     setSelectedLine(line);
     setSelectedSubLine(''); // reset subline on new line choice
-    const relevant = (activityType ? cloudChecklists.filter(c => c.Type_of_Activity === activityType) : cloudChecklists)
-                    .filter(c => c.Line_Equipment === line);
+    const relevant = (activityType ? cloudChecklists.filter(c => String(c.Type_of_Activity || '').trim().toLowerCase() === String(activityType).trim().toLowerCase()) : cloudChecklists)
+                    .filter(c => String(c.Line_Equipment || '').trim().toLowerCase() === String(line).trim().toLowerCase());
     const subs = [...new Set(relevant.map(c => c.Sub_Line_Equipment).filter(Boolean))];
     if (subs.length === 0) {
       // If no sub-lines, step straight to component

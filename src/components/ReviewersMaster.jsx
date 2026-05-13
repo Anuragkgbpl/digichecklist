@@ -6,6 +6,7 @@ export default function ReviewersMaster() {
   const { checklists = [], employees = [], reviewers = [], updateFirebase } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingLine, setEditingLine] = useState(null);
+  const [activeModalLevel, setActiveModalLevel] = useState('L1'); // 'L1' | 'L2' | 'L3'
   const [empSearch, setEmpSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
 
@@ -17,12 +18,16 @@ export default function ReviewersMaster() {
   }, [checklists]);
 
   // 2. Match reviewers mapping to local state representation
-  // format of firebase collection 'reviewers': Array of { id: string, line_equipment: string, reviewerIds: string[] }
+  // format of firebase collection 'reviewers': Array of { id: string, line_equipment: string, reviewerIdsL1: string[], reviewerIdsL2: string[], reviewerIdsL3: string[] }
   const reviewersByLine = useMemo(() => {
     const map = {};
     reviewers.forEach(r => {
       if (r.line_equipment) {
-        map[r.line_equipment] = r.reviewerIds || [];
+        map[r.line_equipment] = {
+          L1: r.reviewerIdsL1 || r.reviewerIds || [], // fallback
+          L2: r.reviewerIdsL2 || [],
+          L3: r.reviewerIdsL3 || []
+        };
       }
     });
     return map;
@@ -39,54 +44,62 @@ export default function ReviewersMaster() {
   const filteredEmployees = useMemo(() => {
     if (!empSearch.trim()) return [];
     const s = empSearch.toLowerCase();
-    // Exclude already added reviewers for this editing line
-    const currentAssigned = reviewersByLine[editingLine] || [];
+    // Exclude already added reviewers for this editing line and active level
+    const currentAssigned = (reviewersByLine[editingLine] && reviewersByLine[editingLine][activeModalLevel]) || [];
     return employees.filter(emp => {
       const isAlreadyAssigned = currentAssigned.includes(emp.Employee_ID);
       const matches = (emp.Employee_ID?.toLowerCase().includes(s) || 
                        emp.Employee_Name?.toLowerCase().includes(s));
       return matches && !isAlreadyAssigned && emp.Status === 'Active';
     }).slice(0, 5);
-  }, [employees, empSearch, editingLine, reviewersByLine]);
+  }, [employees, empSearch, editingLine, reviewersByLine, activeModalLevel]);
 
   // Add a reviewer
   const handleAddReviewer = async (empId) => {
     if (!editingLine) return;
-    const currentAssigned = reviewersByLine[editingLine] || [];
+    const currentAssigned = (reviewersByLine[editingLine] && reviewersByLine[editingLine][activeModalLevel]) || [];
     if (currentAssigned.includes(empId)) return;
 
     const updatedAssigned = [...currentAssigned, empId];
-    await saveReviewersForLine(editingLine, updatedAssigned);
+    await saveReviewersForLine(editingLine, activeModalLevel, updatedAssigned);
     setEmpSearch('');
     setShowDropdown(false);
   };
 
   // Remove a reviewer
-  const handleRemoveReviewer = async (line, empId) => {
-    const currentAssigned = reviewersByLine[line] || [];
+  const handleRemoveReviewer = async (line, level, empId) => {
+    const currentAssigned = (reviewersByLine[line] && reviewersByLine[line][level]) || [];
     const updatedAssigned = currentAssigned.filter(id => id !== empId);
-    await saveReviewersForLine(line, updatedAssigned);
+    await saveReviewersForLine(line, level, updatedAssigned);
   };
 
   // Utility to persist to Firebase
-  const saveReviewersForLine = async (line, reviewerIds) => {
-    // Find existing record in firebase collection 'reviewers'
+  const saveReviewersForLine = async (line, targetLevel, updatedIds) => {
     const existingIndex = reviewers.findIndex(r => r.line_equipment === line);
     let updatedReviewers;
     
+    const currentRec = existingIndex > -1 ? reviewers[existingIndex] : null;
+    
+    const l1 = targetLevel === 'L1' ? updatedIds : (currentRec?.reviewerIdsL1 || currentRec?.reviewerIds || []);
+    const l2 = targetLevel === 'L2' ? updatedIds : (currentRec?.reviewerIdsL2 || []);
+    const l3 = targetLevel === 'L3' ? updatedIds : (currentRec?.reviewerIdsL3 || []);
+    
+    const updatedObj = {
+      ...(currentRec || {
+        id: 'rev_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
+        line_equipment: line,
+      }),
+      reviewerIdsL1: l1,
+      reviewerIdsL2: l2,
+      reviewerIdsL3: l3,
+      // Keep reviewerIds legacy synced for safety
+      reviewerIds: l1
+    };
+
     if (existingIndex > -1) {
-      updatedReviewers = reviewers.map((r, i) => 
-        i === existingIndex ? { ...r, reviewerIds } : r
-      );
+      updatedReviewers = reviewers.map((r, i) => i === existingIndex ? updatedObj : r);
     } else {
-      updatedReviewers = [
-        ...reviewers,
-        {
-          id: 'rev_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
-          line_equipment: line,
-          reviewerIds
-        }
-      ];
+      updatedReviewers = [...reviewers, updatedObj];
     }
     await updateFirebase('reviewers', updatedReviewers);
   };
@@ -126,73 +139,86 @@ export default function ReviewersMaster() {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
             <thead style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--border-color)' }}>
               <tr>
-                <th style={{ padding: '1rem', fontWeight: 600, width: '30%' }}>Line / Equipment</th>
-                <th style={{ padding: '1rem', fontWeight: 600, width: '50%' }}>Assigned Reviewers</th>
-                <th style={{ padding: '1rem', fontWeight: 600, width: '20%', textAlign: 'right' }}>Actions</th>
+                <th style={{ padding: '1rem', fontWeight: 600, width: '22%' }}>Line / Equipment</th>
+                <th style={{ padding: '1rem', fontWeight: 600, width: '22%' }}>Assigned Reviewers - L1</th>
+                <th style={{ padding: '1rem', fontWeight: 600, width: '22%' }}>Assigned Reviewers - L2</th>
+                <th style={{ padding: '1rem', fontWeight: 600, width: '22%' }}>Assigned Reviewers - L3</th>
+                <th style={{ padding: '1rem', fontWeight: 600, width: '12%', textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredLines.map(line => {
-                const assignedIds = reviewersByLine[line] || [];
+                const assigned = reviewersByLine[line] || { L1: [], L2: [], L3: [] };
                 return (
                   <tr key={line} style={{ borderBottom: '1px solid var(--border-color)' }}>
                     <td style={{ padding: '1rem', fontWeight: 600, color: 'var(--primary-dark)' }}>
                       {line}
                     </td>
-                    <td style={{ padding: '1rem' }}>
-                      {assignedIds.length === 0 ? (
-                        <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: '0.8125rem' }}>
-                          No reviewers assigned yet
-                        </span>
-                      ) : (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                          {assignedIds.map(id => {
-                            const details = getEmployeeDetails(id);
-                            return (
-                              <div 
-                                key={id} 
-                                style={{ 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  gap: '0.25rem', 
-                                  padding: '0.25rem 0.5rem', 
-                                  backgroundColor: '#EEF2FF', 
-                                  color: '#4338CA', 
-                                  borderRadius: '6px', 
-                                  fontSize: '0.75rem', 
-                                  fontWeight: 500,
-                                  border: '1px solid #C7D2FE'
-                                }}
-                              >
-                                <span>{details.Employee_Name} ({details.Employee_ID})</span>
-                                <button 
-                                  onClick={() => handleRemoveReviewer(line, id)} 
-                                  style={{ 
-                                    background: 'none', 
-                                    border: 'none', 
-                                    color: '#4F46E5', 
-                                    cursor: 'pointer', 
-                                    padding: 0, 
-                                    display: 'flex', 
-                                    alignItems: 'center' 
-                                  }}
-                                  title="Remove"
-                                >
-                                  <X size={12} />
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </td>
+                    
+                    {['L1', 'L2', 'L3'].map(lvl => {
+                      const assignedIds = assigned[lvl] || [];
+                      return (
+                        <td key={lvl} style={{ padding: '1rem' }}>
+                          {assignedIds.length === 0 ? (
+                            <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: '0.75rem' }}>
+                              None
+                            </span>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                              {assignedIds.map(id => {
+                                const details = getEmployeeDetails(id);
+                                return (
+                                  <div 
+                                    key={id} 
+                                    style={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      justifyContent: 'space-between',
+                                      gap: '0.25rem', 
+                                      padding: '0.25rem 0.5rem', 
+                                      backgroundColor: lvl === 'L1' ? '#EEF2FF' : lvl === 'L2' ? '#ECFDF5' : '#FFFBEB', 
+                                      color: lvl === 'L1' ? '#4338CA' : lvl === 'L2' ? '#059669' : '#B45309', 
+                                      borderRadius: '4px', 
+                                      fontSize: '0.72rem', 
+                                      fontWeight: 500,
+                                      border: `1px solid ${lvl === 'L1' ? '#C7D2FE' : lvl === 'L2' ? '#A7F3D0' : '#FDE68A'}`
+                                    }}
+                                  >
+                                    <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                                      {details.Employee_Name} ({details.Employee_ID})
+                                    </span>
+                                    <button 
+                                      onClick={() => handleRemoveReviewer(line, lvl, id)} 
+                                      style={{ 
+                                        background: 'none', 
+                                        border: 'none', 
+                                        color: 'inherit', 
+                                        cursor: 'pointer', 
+                                        padding: 0, 
+                                        display: 'flex', 
+                                        alignItems: 'center',
+                                        opacity: 0.7
+                                      }}
+                                      title="Remove"
+                                    >
+                                      <X size={11} />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+
                     <td style={{ padding: '1rem', textAlign: 'right' }}>
                       <button 
-                        onClick={() => { setEditingLine(line); setEmpSearch(''); setShowDropdown(false); }}
+                         onClick={() => { setEditingLine(line); setActiveModalLevel('L1'); setEmpSearch(''); setShowDropdown(false); }}
                         className="btn btn-secondary" 
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
                       >
-                        <Plus size={14} /> Manage Reviewers
+                        <Plus size={14} /> Manage
                       </button>
                     </td>
                   </tr>
@@ -201,7 +227,7 @@ export default function ReviewersMaster() {
               
               {filteredLines.length === 0 && (
                 <tr>
-                  <td colSpan="3" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                  <td colSpan="5" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
                     {searchTerm ? 'No matching Line/Equipment found.' : 'Please upload checklists to see Line / Equipment here.'}
                   </td>
                 </tr>
@@ -232,14 +258,38 @@ export default function ReviewersMaster() {
               <div style={{ fontWeight: 700, color: 'var(--primary-dark)', fontSize: '1.05rem', marginTop: '0.15rem' }}>{editingLine}</div>
             </div>
 
-            {/* Current Assigned In Modal */}
+            {/* Tabs inside the Modal */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)' }}>
+              {['L1', 'L2', 'L3'].map(lvl => (
+                <button
+                  key={lvl}
+                  onClick={() => { setActiveModalLevel(lvl); setEmpSearch(''); setShowDropdown(false); }}
+                  style={{
+                    flex: 1,
+                    padding: '0.6rem',
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeModalLevel === lvl ? '3px solid var(--primary-light)' : 'none',
+                    color: activeModalLevel === lvl ? 'var(--primary-light)' : 'var(--text-secondary)',
+                    fontWeight: activeModalLevel === lvl ? 700 : 500,
+                    fontSize: '0.875rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Level {lvl}
+                </button>
+              ))}
+            </div>
+
+            {/* Current Assigned In Modal for active level */}
             <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Currently Assigned</label>
+              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Assigned Reviewers - {activeModalLevel}</label>
               <div style={{ minHeight: '40px', padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: '6px', display: 'flex', flexWrap: 'wrap', gap: '0.5rem', backgroundColor: '#FAFAFA' }}>
-                {(reviewersByLine[editingLine] || []).length === 0 ? (
+                {((reviewersByLine[editingLine] && reviewersByLine[editingLine][activeModalLevel]) || []).length === 0 ? (
                   <div style={{ color: 'var(--text-tertiary)', fontSize: '0.8125rem', fontStyle: 'italic' }}>None</div>
                 ) : (
-                  (reviewersByLine[editingLine] || []).map(id => {
+                  ((reviewersByLine[editingLine] && reviewersByLine[editingLine][activeModalLevel]) || []).map(id => {
                     const details = getEmployeeDetails(id);
                     return (
                       <div 
@@ -249,8 +299,8 @@ export default function ReviewersMaster() {
                           alignItems: 'center', 
                           gap: '0.25rem', 
                           padding: '0.25rem 0.5rem', 
-                          backgroundColor: '#E0E7FF', 
-                          color: '#4338CA', 
+                          backgroundColor: activeModalLevel === 'L1' ? '#E0E7FF' : activeModalLevel === 'L2' ? '#D1FAE5' : '#FEF3C7', 
+                          color: activeModalLevel === 'L1' ? '#4338CA' : activeModalLevel === 'L2' ? '#065F46' : '#92400E', 
                           borderRadius: '4px', 
                           fontSize: '0.75rem', 
                           fontWeight: 600
@@ -258,7 +308,7 @@ export default function ReviewersMaster() {
                       >
                         <span>{details.Employee_Name}</span>
                         <button 
-                          onClick={() => handleRemoveReviewer(editingLine, id)} 
+                          onClick={() => handleRemoveReviewer(editingLine, activeModalLevel, id)} 
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: 0, display: 'flex' }}
                         >
                           <X size={12} />

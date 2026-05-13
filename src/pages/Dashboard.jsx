@@ -39,7 +39,9 @@ const Dashboard = () => {
     userFilter: '',
     shift: 'ALL',
     docNo: 'ALL',
-    revNo: 'ALL'
+    revNo: 'ALL',
+    month: 'ALL',
+    year: 'ALL'
   });
 
   const COLORS = {
@@ -52,6 +54,24 @@ const Dashboard = () => {
   };
 
   const SHIFT_COLORS = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B'];
+
+  // Helper static / dynamic values for month/year options
+  const yearOptions = useMemo(() => {
+    const years = [...new Set(rawData.map(r => r.Date ? r.Date.split('-')[0] : '').filter(Boolean))];
+    // Ensure current year is present if no data yet
+    const cy = new Date().getFullYear().toString();
+    if (!years.includes(cy)) years.push(cy);
+    return years.sort().reverse();
+  }, [rawData]);
+
+  const monthOptions = [
+    { value: '01', label: 'January' }, { value: '02', label: 'February' },
+    { value: '03', label: 'March' }, { value: '04', label: 'April' },
+    { value: '05', label: 'May' }, { value: '06', label: 'June' },
+    { value: '07', label: 'July' }, { value: '08', label: 'August' },
+    { value: '09', label: 'September' }, { value: '10', label: 'October' },
+    { value: '11', label: 'November' }, { value: '12', label: 'December' }
+  ];
 
   // Filtered dataset based on date range and layout dimensions
   const filteredData = useMemo(() => {
@@ -66,6 +86,16 @@ const Dashboard = () => {
       if (filters.shift !== 'ALL' && item.Shift !== filters.shift) return false;
       if (filters.docNo !== 'ALL' && item.Document_Number !== filters.docNo) return false;
       if (filters.revNo !== 'ALL' && item.Revision_Number !== filters.revNo) return false;
+      
+      // Year & Month isolation checks
+      if (filters.year !== 'ALL') {
+        const y = item.Date ? item.Date.split('-')[0] : '';
+        if (y !== filters.year) return false;
+      }
+      if (filters.month !== 'ALL') {
+        const m = item.Date ? item.Date.split('-')[1] : '';
+        if (m !== filters.month) return false;
+      }
       return true;
     });
   }, [rawData, filters]);
@@ -149,8 +179,15 @@ const Dashboard = () => {
       };
     });
 
-    // Day-wise Backlog Accumulation
-    const dates = [...new Set(filteredData.map(r => r.Date).filter(Boolean))].sort().slice(-7);
+    // Day-wise Backlog Accumulation (Guaranteed 7-Day Sequential Basis)
+    const referenceDate = filters.dateEnd ? new Date(filters.dateEnd) : new Date();
+    const dates = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(referenceDate);
+      d.setDate(d.getDate() - i);
+      dates.push(d.toISOString().split('T')[0]);
+    }
+
     const backlogTrend = dates.map(date => {
       const dayLogs = filteredData.filter(r => r.Date === date);
       const pendingCount = dayLogs.filter(r => r.Status === 'Pending' || r.Status === 'WIP').length;
@@ -167,14 +204,18 @@ const Dashboard = () => {
       backlogTrend,
       gShiftContribution: gCleared
     };
-  }, [filteredData]);
+  }, [filteredData, filters.dateEnd]);
 
-  // 7-Day Performance Trend Stacked Status
+  // 7-Day Performance Trend Stacked Status (Guaranteed 7-Day Sequential Basis)
   const stackedStatusTrend = useMemo(() => {
-    const dates = [...new Set(filteredData.map(r => r.Date).filter(Boolean))].sort().slice(-7);
-    if (dates.length === 0) {
-      return [];
+    const referenceDate = filters.dateEnd ? new Date(filters.dateEnd) : new Date();
+    const dates = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(referenceDate);
+      d.setDate(d.getDate() - i);
+      dates.push(d.toISOString().split('T')[0]);
     }
+
     return dates.map(date => {
       const dayLogs = filteredData.filter(r => r.Date === date);
       const done = dayLogs.filter(r => r.Status === 'Done').length;
@@ -184,7 +225,7 @@ const Dashboard = () => {
       const pending = dayLogs.filter(r => r.Status === 'Pending').length;
       return { date, Done: done, WIP: wip, Hold: hold, Support: support, Pending: pending };
     });
-  }, [filteredData]);
+  }, [filteredData, filters.dateEnd]);
 
   // ----------------------------------------------------
   // 3. PRODUCTIVITY & TIME CALCULATIONS
@@ -192,21 +233,22 @@ const Dashboard = () => {
   const productivityStats = useMemo(() => {
     // Peak execution hours distribution
     const hours = Array.from({ length: 24 }, (_, i) => ({ hour: `${String(i).padStart(2, '0')}:00`, count: 0 }));
-    filteredData.forEach(r => {
-      if (r.Date_Timestamp) {
-        const h = new Date(r.Date_Timestamp).getHours();
-        if (h >= 0 && h < 24) hours[h].count++;
-      }
-    });
-
-    // Early shift (first 4 hours) vs Late shift (last 4 hours)
+    
     let earlyCount = 0;
     let lateCount = 0;
+
     filteredData.forEach(r => {
-      if (r.Date_Timestamp) {
-        const hour = new Date(r.Date_Timestamp).getHours();
-        if (hour >= 6 && hour < 10) earlyCount++;
-        if (hour >= 18 && hour < 22) lateCount++;
+      const rawTS = r.Date_Timestamp || r.timestamp || r.Date;
+      if (rawTS) {
+        const parsed = new Date(rawTS);
+        if (!isNaN(parsed.getTime())) {
+          const h = parsed.getHours();
+          if (h >= 0 && h < 24) {
+            hours[h].count++;
+          }
+          if (h >= 6 && h < 10) earlyCount++;
+          if (h >= 18 && h < 22) lateCount++;
+        }
       }
     });
 
@@ -219,7 +261,7 @@ const Dashboard = () => {
     }).sort((a,b) => b.minutes - a.minutes);
 
     return {
-      hourlyPeak: hours.filter(h => h.count > 0),
+      hourlyPeak: hours, // Retain all 24 hours to render baseline correctly
       earlyCompletions: earlyCount,
       lateCompletions: lateCount,
       durationByActivity
@@ -444,7 +486,14 @@ const Dashboard = () => {
       { name: 'Pending', value: totalPendingReview }
     ].filter(i => i.value > 0);
 
-    const dates = [...new Set(reviewSubmissions.map(r => r.Date).filter(Boolean))].sort().slice(-7);
+    const referenceDate = filters.dateEnd ? new Date(filters.dateEnd) : new Date();
+    const dates = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(referenceDate);
+      d.setDate(d.getDate() - i);
+      dates.push(d.toISOString().split('T')[0]);
+    }
+
     const reviewTrend = dates.map(date => {
       const dayLogs = reviewSubmissions.filter(r => r.Date === date);
       const reviewedCount = dayLogs.filter(r => r.Review_Status).length;
@@ -464,7 +513,7 @@ const Dashboard = () => {
   }, [rawData, reviewers]);
 
   const resetFilters = () => {
-    setFilters({ dateStart: '', dateEnd: '', type: 'ALL', line: 'ALL', subLine: 'ALL', frequency: 'ALL', userFilter: '', shift: 'ALL', docNo: 'ALL', revNo: 'ALL' });
+    setFilters({ dateStart: '', dateEnd: '', type: 'ALL', line: 'ALL', subLine: 'ALL', frequency: 'ALL', userFilter: '', shift: 'ALL', docNo: 'ALL', revNo: 'ALL', month: 'ALL', year: 'ALL' });
   };
 
   return (
@@ -500,6 +549,22 @@ const Dashboard = () => {
                 <span style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>to</span>
                 <input type="date" value={filters.dateEnd} onChange={e => setFilters({...filters, dateEnd: e.target.value})} style={{ flex: 1, padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }} />
               </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>CALENDAR YEAR</label>
+              <select value={filters.year} onChange={e => setFilters({...filters, year: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
+                <option value="ALL">All Years</option>
+                {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>CALENDAR MONTH</label>
+              <select value={filters.month} onChange={e => setFilters({...filters, month: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
+                <option value="ALL">All Months</option>
+                {monthOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
             </div>
             
             <div>
@@ -695,18 +760,25 @@ const Dashboard = () => {
             </h3>
             <div style={{ height: '300px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={stackedStatusTrend}>
+                <AreaChart data={stackedStatusTrend} margin={{ left: -10, right: 10 }}>
+                  <defs>
+                    <linearGradient id="colorDone" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={COLORS.Done} stopOpacity={0.6}/><stop offset="95%" stopColor={COLORS.Done} stopOpacity={0.0}/></linearGradient>
+                    <linearGradient id="colorWIP" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={COLORS.WIP} stopOpacity={0.6}/><stop offset="95%" stopColor={COLORS.WIP} stopOpacity={0.0}/></linearGradient>
+                    <linearGradient id="colorHold" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={COLORS.Hold} stopOpacity={0.6}/><stop offset="95%" stopColor={COLORS.Hold} stopOpacity={0.0}/></linearGradient>
+                    <linearGradient id="colorSupport" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={COLORS.Support} stopOpacity={0.6}/><stop offset="95%" stopColor={COLORS.Support} stopOpacity={0.0}/></linearGradient>
+                    <linearGradient id="colorPending" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={COLORS.Pending} stopOpacity={0.6}/><stop offset="95%" stopColor={COLORS.Pending} stopOpacity={0.0}/></linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                   <XAxis dataKey="date" fontSize={10} axisLine={false} tickLine={false} />
                   <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="Done" stackId="a" fill={COLORS.Done} name="Done" />
-                  <Bar dataKey="WIP" stackId="a" fill={COLORS.WIP} name="In Progress" />
-                  <Bar dataKey="Hold" stackId="a" fill={COLORS.Hold} name="Hold" />
-                  <Bar dataKey="Support" stackId="a" fill={COLORS.Support} name="Support Required" />
-                  <Bar dataKey="Pending" stackId="a" fill={COLORS.Pending} name="Pending" />
-                </BarChart>
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.08)' }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                  <Area type="monotone" dataKey="Done" stackId="1" stroke={COLORS.Done} fill="url(#colorDone)" name="Done" strokeWidth={2.5} />
+                  <Area type="monotone" dataKey="WIP" stackId="1" stroke={COLORS.WIP} fill="url(#colorWIP)" name="In Progress" strokeWidth={2.5} />
+                  <Area type="monotone" dataKey="Hold" stackId="1" stroke={COLORS.Hold} fill="url(#colorHold)" name="Hold" strokeWidth={2.5} />
+                  <Area type="monotone" dataKey="Support" stackId="1" stroke={COLORS.Support} fill="url(#colorSupport)" name="Support Required" strokeWidth={2.5} />
+                  <Area type="monotone" dataKey="Pending" stackId="1" stroke={COLORS.Pending} fill="url(#colorPending)" name="Pending" strokeWidth={2.5} />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
@@ -973,7 +1045,14 @@ const Dashboard = () => {
             <div style={{ height: '300px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={(() => {
-                  const dates = [...new Set(filteredData.map(r => r.Date).filter(Boolean))].sort().slice(-7);
+                  const referenceDate = filters.dateEnd ? new Date(filters.dateEnd) : new Date();
+                  const dates = [];
+                  for (let i = 6; i >= 0; i--) {
+                    const d = new Date(referenceDate);
+                    d.setDate(d.getDate() - i);
+                    dates.push(d.toISOString().split('T')[0]);
+                  }
+
                   const topUsers = userPerformance.leaderboard.slice(0, 4).map(u => u.name);
                   return dates.map(date => {
                     const dayLogs = filteredData.filter(r => r.Date === date && r.Status === 'Done');
@@ -1525,15 +1604,25 @@ const Dashboard = () => {
             </h3>
             <div style={{ height: '300px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={reviewPerformanceStats.reviewTrend}>
+                <AreaChart data={reviewPerformanceStats.reviewTrend} margin={{ left: -10, right: 10 }}>
+                  <defs>
+                    <linearGradient id="colorReviewed" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.6}/>
+                      <stop offset="95%" stopColor="#10B981" stopOpacity={0.0}/>
+                    </linearGradient>
+                    <linearGradient id="colorPendingReview" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.6}/>
+                      <stop offset="95%" stopColor="#F59E0B" stopOpacity={0.0}/>
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                   <XAxis dataKey="date" fontSize={10} axisLine={false} tickLine={false} />
                   <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="Reviewed" stackId="a" fill="#10B981" name="Reviewed Tasks" />
-                  <Bar dataKey="Pending" stackId="a" fill="#F59E0B" name="Unreviewed/Pending" />
-                </BarChart>
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.08)' }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                  <Area type="monotone" dataKey="Reviewed" stackId="review" stroke="#10B981" fill="url(#colorReviewed)" name="Reviewed Tasks" strokeWidth={2.5} />
+                  <Area type="monotone" dataKey="Pending" stackId="review" stroke="#F59E0B" fill="url(#colorPendingReview)" name="Unreviewed/Pending" strokeWidth={2.5} />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>

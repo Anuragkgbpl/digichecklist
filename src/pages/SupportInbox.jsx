@@ -29,13 +29,74 @@ const SupportInbox = () => {
   const isAdmin = user?.role === 'UNIT_ADMIN' || user?.role === 'MASTER_ADMIN';
   const [activeTab, setActiveTab] = useState(isAdmin ? 'all' : 'allocated_by_me');
 
-  // Review Inbox state and filters
-  const reviewerLines = useMemo(() => {
-    if (!user?.id) return [];
-    return reviewers.filter(r => r.reviewerIds?.includes(user.id)).map(r => r.line_equipment);
+  // Review Inbox multi-level state mapping
+  const reviewerRoles = useMemo(() => {
+    if (!user?.id) return { L1: [], L2: [], L3: [], originalLines: [] };
+    const L1 = [];
+    const L2 = [];
+    const L3 = [];
+    const originalLines = [];
+    reviewers.forEach(r => {
+      if (!r.line_equipment) return;
+      const hasL1 = (r.reviewerIdsL1 || r.reviewerIds || []).includes(user.id);
+      const hasL2 = (r.reviewerIdsL2 || []).includes(user.id);
+      const hasL3 = (r.reviewerIdsL3 || []).includes(user.id);
+      
+      if (hasL1 || hasL2 || hasL3) {
+        originalLines.push(r.line_equipment);
+      }
+      const cleanLine = String(r.line_equipment).trim().toLowerCase();
+      if (hasL1) L1.push(cleanLine);
+      if (hasL2) L2.push(cleanLine);
+      if (hasL3) L3.push(cleanLine);
+    });
+    return { L1, L2, L3, originalLines: [...new Set(originalLines)] };
   }, [reviewers, user]);
   
+  const reviewerLines = reviewerRoles.originalLines;
   const isReviewer = reviewerLines.length > 0;
+
+  // Centralized logic to determine if a submission belongs in the user's review workflow queue
+  const isVisibleInReviewInbox = (sub) => {
+    const cleanLine = String(sub.Line_Equipment || '').trim().toLowerCase();
+    const currentStatus = sub.Review_Status || 'Pending';
+
+    // 1. Security clearance
+    const isL1 = reviewerRoles.L1.includes(cleanLine);
+    const isL2 = reviewerRoles.L2.includes(cleanLine);
+    const isL3 = reviewerRoles.L3.includes(cleanLine);
+    if (!isL1 && !isL2 && !isL3) return false;
+
+    // 2. Workflow level-alignment (Action required at my active level)
+    let isPendingAtMyLevel = false;
+    if (isL1 && currentStatus === 'Pending') isPendingAtMyLevel = true;
+    if (isL2 && currentStatus === 'L1 Approved') isPendingAtMyLevel = true;
+    if (isL3 && currentStatus === 'L2 Approved') isPendingAtMyLevel = true;
+
+    // 3. History tracking (Did I personally act on this)
+    const iReviewedIt = sub.Reviewed_By_ID === user?.id || 
+                        (sub.Review_History || []).some(h => h.by_id === user?.id);
+
+    // 4. Evaluation of the status filters
+    if (revStatusFilter === 'all') {
+      return isPendingAtMyLevel || iReviewedIt;
+    }
+    
+    if (revStatusFilter === 'Pending') {
+      return isPendingAtMyLevel;
+    }
+    
+    if (revStatusFilter === 'Approved') {
+      const isApprovedState = ['L1 Approved', 'L2 Approved', 'Approved'].includes(currentStatus);
+      return isApprovedState && iReviewedIt;
+    }
+    
+    if (revStatusFilter === 'Needs Correction') {
+      return currentStatus === 'Needs Correction' && iReviewedIt;
+    }
+
+    return false;
+  };
   
   const [revFreqFilter, setRevFreqFilter] = useState('all');
   const [revTypeFilter, setRevTypeFilter] = useState('all');
@@ -67,6 +128,25 @@ const SupportInbox = () => {
     return ['all', ...new Set(submissions.map(s => s.Type_of_Activity).filter(Boolean))];
   }, [submissions]);
 
+  const computeNextReviewStatus = (sub, requestedStatus) => {
+    if (requestedStatus !== 'Approved') return requestedStatus; // e.g. 'Needs Correction'
+    
+    const cleanLine = String(sub.Line_Equipment || '').trim().toLowerCase();
+    const currentStatus = sub.Review_Status || 'Pending';
+    
+    if (currentStatus === 'Pending' && reviewerRoles.L1.includes(cleanLine)) {
+      return 'L1 Approved';
+    }
+    if (currentStatus === 'L1 Approved' && reviewerRoles.L2.includes(cleanLine)) {
+      return 'L2 Approved';
+    }
+    if (currentStatus === 'L2 Approved' && reviewerRoles.L3.includes(cleanLine)) {
+      return 'Approved';
+    }
+    
+    return 'Approved'; // Fallback fallback if direct or admin approval
+  };
+
   const handleSaveReview = async (submissionId, status) => {
     const remark = revRemarks[submissionId] || '';
     if (!status) { alert('Please choose review status'); return; }
@@ -75,13 +155,24 @@ const SupportInbox = () => {
     const updatedSubmissions = submissions.map(sub => {
       const subKey = sub.id || (sub.Date_Timestamp + '_' + sub.Submitted_By);
       if (subKey === submissionId) {
+        const nextStatus = computeNextReviewStatus(sub, status);
         return {
           ...sub,
-          Review_Status: status,
+          Review_Status: nextStatus,
           Review_Remarks: remark,
           Reviewed_By: user?.name || user?.id,
           Reviewed_By_ID: user?.id,
-          Reviewed_Date: new Date().toISOString()
+          Reviewed_Date: new Date().toISOString(),
+          Review_History: [
+            ...(sub.Review_History || []),
+            {
+              status: nextStatus,
+              remark: remark,
+              by: user?.name || user?.id,
+              by_id: user?.id,
+              date: new Date().toISOString()
+            }
+          ]
         };
       }
       return sub;
@@ -93,12 +184,13 @@ const SupportInbox = () => {
     });
 
     // Create Log entry
+    const nextStatusCalculated = targetSub ? computeNextReviewStatus(targetSub, status) : status;
     const newLog = {
       id: 'log_' + Date.now(),
       timestamp: new Date().toISOString(),
       type: 'Review Update',
       user: user?.name || user?.id,
-      action: `Reviewed activity on ${targetSub?.Line_Equipment}: ${status}`,
+      action: `Reviewed activity on ${targetSub?.Line_Equipment}: ${nextStatusCalculated}`,
       details: `Remarks: ${remark}. Component: ${targetSub?.Component}.`
     };
 
@@ -116,7 +208,7 @@ const SupportInbox = () => {
       delete c[submissionId];
       return c;
     });
-    alert('Review submitted successfully.');
+    alert('Review updated successfully.');
   };
 
   const handleBulkApprove = async (groupKey, items) => {
@@ -125,14 +217,24 @@ const SupportInbox = () => {
     const updatedSubmissions = submissions.map(sub => {
       const currentKey = `${sub.Date}_${sub.Shift || 'Gen'}_${sub.Line_Equipment}_${sub.Frequency || 'Daily'}`;
       if (currentKey === groupKey) {
-        // We only want to review items that are pending, or reset them all? Overwrite all to 'Approved'
+        const nextStatus = computeNextReviewStatus(sub, 'Approved');
         return {
           ...sub,
-          Review_Status: 'Approved',
+          Review_Status: nextStatus,
           Review_Remarks: remark || sub.Review_Remarks || 'Approved in bulk',
           Reviewed_By: user?.name || user?.id,
           Reviewed_By_ID: user?.id,
-          Reviewed_Date: new Date().toISOString()
+          Reviewed_Date: new Date().toISOString(),
+          Review_History: [
+            ...(sub.Review_History || []),
+            {
+              status: nextStatus,
+              remark: remark || 'Approved in bulk',
+              by: user?.name || user?.id,
+              by_id: user?.id,
+              date: new Date().toISOString()
+            }
+          ]
         };
       }
       return sub;
@@ -161,45 +263,38 @@ const SupportInbox = () => {
   const filteredReviewSubmissions = useMemo(() => {
     if (activeTab !== 'review_inbox') return [];
     return submissions.filter(sub => {
-      // Check if line belongs to reviewer
-      if (!reviewerLines.includes(sub.Line_Equipment)) return false;
+      // 1. Apply multi-level access and workflow engine
+      if (!isVisibleInReviewInbox(sub)) return false;
       
-      // Quick filters
+      // 2. Apply Case-Agnostic / Trim-Agnostic quick filters
       if (revFreqFilter !== 'all') {
-        if (String(sub.Frequency || '').toLowerCase() !== revFreqFilter.toLowerCase()) return false;
+        if (String(sub.Frequency || '').trim().toLowerCase() !== revFreqFilter.toLowerCase()) return false;
       }
       if (revTypeFilter !== 'all') {
-        if (sub.Type_of_Activity !== revTypeFilter) return false;
+        if (String(sub.Type_of_Activity || '').trim().toLowerCase() !== String(revTypeFilter).trim().toLowerCase()) return false;
       }
       if (revLineFilter !== 'all') {
-        if (sub.Line_Equipment !== revLineFilter) return false;
-      }
-      if (revStatusFilter !== 'all') {
-        const currentRev = sub.Review_Status || 'Pending';
-        if (currentRev.toLowerCase() !== revStatusFilter.toLowerCase()) return false;
+        if (String(sub.Line_Equipment || '').trim().toLowerCase() !== String(revLineFilter).trim().toLowerCase()) return false;
       }
       return true;
     }).reverse();
-  }, [submissions, activeTab, reviewerLines, revFreqFilter, revTypeFilter, revLineFilter, revStatusFilter]);
+  }, [submissions, activeTab, revFreqFilter, revTypeFilter, revLineFilter, isVisibleInReviewInbox]);
 
   const reviewSummaryGroups = useMemo(() => {
     if (activeTab !== 'review_inbox') return [];
     
-    // Apply same global filter context to submissions
+    // Use the same robust workflow filter context
     const baseData = submissions.filter(sub => {
-      if (!reviewerLines.includes(sub.Line_Equipment)) return false;
+      if (!isVisibleInReviewInbox(sub)) return false;
+      
       if (revFreqFilter !== 'all') {
-        if (String(sub.Frequency || '').toLowerCase() !== revFreqFilter.toLowerCase()) return false;
+        if (String(sub.Frequency || '').trim().toLowerCase() !== revFreqFilter.toLowerCase()) return false;
       }
       if (revTypeFilter !== 'all') {
-        if (sub.Type_of_Activity !== revTypeFilter) return false;
+        if (String(sub.Type_of_Activity || '').trim().toLowerCase() !== String(revTypeFilter).trim().toLowerCase()) return false;
       }
       if (revLineFilter !== 'all') {
-        if (sub.Line_Equipment !== revLineFilter) return false;
-      }
-      if (revStatusFilter !== 'all') {
-        const currentRev = sub.Review_Status || 'Pending';
-        if (currentRev.toLowerCase() !== revStatusFilter.toLowerCase()) return false;
+        if (String(sub.Line_Equipment || '').trim().toLowerCase() !== String(revLineFilter).trim().toLowerCase()) return false;
       }
       return true;
     });
@@ -223,8 +318,21 @@ const SupportInbox = () => {
     });
 
     return Object.values(groups).map(g => {
-      const pendingCount = g.items.filter(i => !i.Review_Status || i.Review_Status === 'Pending').length;
-      const approvedCount = g.items.filter(i => i.Review_Status === 'Approved').length;
+      // Dynamically calculate what is truly 'Pending' at this specific user's level!
+      const pendingCount = g.items.filter(i => {
+        const cleanLine = String(i.Line_Equipment || '').trim().toLowerCase();
+        const currentStatus = i.Review_Status || 'Pending';
+        const isL1 = reviewerRoles.L1.includes(cleanLine);
+        const isL2 = reviewerRoles.L2.includes(cleanLine);
+        const isL3 = reviewerRoles.L3.includes(cleanLine);
+        
+        if (isL1 && currentStatus === 'Pending') return true;
+        if (isL2 && currentStatus === 'L1 Approved') return true;
+        if (isL3 && currentStatus === 'L2 Approved') return true;
+        return false;
+      }).length;
+
+      const approvedCount = g.items.filter(i => ['L1 Approved', 'L2 Approved', 'Approved'].includes(i.Review_Status)).length;
       const rejectedCount = g.items.filter(i => i.Review_Status === 'Needs Correction').length;
       
       return {
@@ -237,7 +345,14 @@ const SupportInbox = () => {
         statusSummary: pendingCount > 0 ? 'Pending Review' : (rejectedCount > 0 ? 'Action Required' : 'Approved')
       };
     }).sort((a, b) => b.date.localeCompare(a.date)); // Recent dates first
-  }, [submissions, activeTab, reviewerLines, revFreqFilter, revTypeFilter, revLineFilter, revStatusFilter]);
+  }, [submissions, activeTab, reviewerRoles, revFreqFilter, revTypeFilter, revLineFilter, isVisibleInReviewInbox]);
+
+  const getReviewStatusBadgeStyle = (st) => {
+    if (st === 'Approved') return { bg: '#ECFDF5', fg: '#059669' };
+    if (st === 'L1 Approved' || st === 'L2 Approved') return { bg: '#EFF6FF', fg: '#2563EB' };
+    if (st === 'Needs Correction') return { bg: '#FEF2F2', fg: '#DC2626' };
+    return { bg: '#FFFBEB', fg: '#D97706' };
+  };
 
   const filteredSubmissions = useMemo(() => {
     if (activeTab !== 'submission_logs') return [];
@@ -370,7 +485,53 @@ const SupportInbox = () => {
     return list;
   }, [supportInbox, activeTab, isAdmin, user, adminDurationFilter, dateFilter, nameFilter, statusFilter]);
 
+  // Map Support Inbox status onto the main Checklist status fields
+  const mapSupportToChecklistStatus = (supportStatus) => {
+    switch(supportStatus) {
+      case 'Resolved': return 'Done';
+      case 'In Progress': return 'WIP';
+      case 'Hold': return 'Hold';
+      case 'Postpone': return 'Postponed';
+      case 'Critical': return 'Support Required';
+      case 'Support Required': return 'Support Required';
+      case 'Pending': return 'WIP'; // Allocated means it is active Work-in-progress
+      default: return null;
+    }
+  };
+
+  // Generates updated submissions list keeping statuses in sync
+  const getSyncedSubmissions = (targetReq, nextSupportStatus) => {
+    const nextChecklistStatus = mapSupportToChecklistStatus(nextSupportStatus);
+    if (!nextChecklistStatus) return submissions; // Return unchanged if state doesn't map
+
+    return submissions.map(sub => {
+      let isMatch = false;
+      if (targetReq.submissionId && sub.id === targetReq.submissionId) {
+        isMatch = true;
+      } else {
+        // Heuristic match fallback for existing/legacy support entries
+        const actMatch = String(sub.Type_of_Activity || '').trim().toLowerCase() === String(targetReq.activity || '').trim().toLowerCase();
+        const compMatch = String(sub.Component || '').trim().toLowerCase() === String(targetReq.component || '').trim().toLowerCase();
+        const reqDate = targetReq.timestamp ? targetReq.timestamp.split('T')[0] : '';
+        const subDate = (sub.Date_Timestamp || sub.timestamp || sub.Date || '').split('T')[0];
+        const dateMatch = reqDate && subDate && reqDate === subDate;
+        isMatch = actMatch && compMatch && dateMatch;
+      }
+
+      if (isMatch) {
+        return { 
+          ...sub, 
+          Status: nextChecklistStatus,
+          Last_Synced_Status_Update: new Date().toISOString(),
+          Synced_From_Support_Status: nextSupportStatus
+        };
+      }
+      return sub;
+    });
+  };
+
   const handleResolve = async (entryId) => {
+    const reqItem = supportInbox.find(r => r.id === entryId);
     const updated = supportInbox.map(req => {
       if (req.id === entryId) {
         return {
@@ -382,11 +543,20 @@ const SupportInbox = () => {
       }
       return req;
     });
+    
     await updateFirebase('support_inbox', updated);
+
+    // Sync back state updating Checklist Submissions to Done
+    if (reqItem) {
+      const updatedSubmissions = getSyncedSubmissions(reqItem, 'Resolved');
+      await updateFirebase('submissions', updatedSubmissions);
+    }
+
     setAdminReply(prev => ({ ...prev, [entryId]: '' }));
   };
 
   const handleAdminJobAllocate = async (entryId) => {
+    const reqItem = supportInbox.find(r => r.id === entryId);
     const updated = supportInbox.map(req => {
       if (req.id === entryId) {
         return {
@@ -398,7 +568,15 @@ const SupportInbox = () => {
       }
       return req;
     });
+    
     await updateFirebase('support_inbox', updated);
+
+    // Sync state backward updating Checklist Submissions to WIP
+    if (reqItem) {
+      const updatedSubmissions = getSyncedSubmissions(reqItem, 'Pending');
+      await updateFirebase('submissions', updatedSubmissions);
+    }
+
     setAdminReply(prev => ({ ...prev, [entryId]: '' }));
   };
 
@@ -437,13 +615,15 @@ const SupportInbox = () => {
       newStatus = 'Resolved';
     }
 
+    const finalCalculatedStatus = isCritical ? 'Critical' : newStatus;
+
     const updated = supportInbox.map(r => {
       if (r.id === entryId) {
         const updates = r.userUpdates || [];
         const newUpdate = [];
         if (reply.trim() || statusUpdate) {
           newUpdate.push({
-            text: reply.trim() || `Changed status to ${newStatus}`,
+            text: reply.trim() || `Changed status to ${finalCalculatedStatus}`,
             timestamp: new Date().toISOString(),
             by: user?.name || user?.id,
             photo: photo
@@ -451,17 +631,23 @@ const SupportInbox = () => {
         }
         return {
           ...r,
-          status: isCritical ? 'Critical' : newStatus,
+          status: finalCalculatedStatus,
           isCritical,
           supportCount: sCount,
           postponeCount: pCount,
-          resolvedAt: newStatus === 'Resolved' ? new Date().toISOString() : r.resolvedAt,
+          resolvedAt: finalCalculatedStatus === 'Resolved' ? new Date().toISOString() : r.resolvedAt,
           userUpdates: [...updates, ...newUpdate]
         };
       }
       return r;
     });
+    
     await updateFirebase('support_inbox', updated);
+
+    // Push the precise status update backward to linked Checklist Submissions
+    const updatedSubmissions = getSyncedSubmissions(req, finalCalculatedStatus);
+    await updateFirebase('submissions', updatedSubmissions);
+
     setUserReply(prev => ({ ...prev, [entryId]: '' }));
     setPhotos(prev => ({ ...prev, [entryId]: null }));
     setUserAction(prev => ({ ...prev, [entryId]: '' }));
@@ -968,6 +1154,7 @@ const SupportInbox = () => {
                     <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Review Status</th>
                     <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Reviewed By</th>
                     <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Review Remarks</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Photo</th>
                   </>
                 )}
 
@@ -1017,22 +1204,41 @@ const SupportInbox = () => {
                         <td style={{ padding: '0.75rem 1rem', color: 'var(--text-tertiary)' }}>{sub.Date_Timestamp ? new Date(sub.Date_Timestamp).toLocaleTimeString() : '-'}</td>
                         <td style={{ padding: '0.75rem 1rem' }}>
                           {sub.Review_Status ? (
-                            <span style={{ 
-                              padding: '0.15rem 0.4rem', 
-                              borderRadius: '3px', 
-                              fontSize: '0.65rem', 
-                              fontWeight: 700, 
-                              backgroundColor: sub.Review_Status === 'Approved' ? '#ECFDF5' : '#FEF2F2', 
-                              color: sub.Review_Status === 'Approved' ? '#059669' : '#DC2626'
-                            }}>
-                              {sub.Review_Status}
-                            </span>
+                            (() => {
+                              const badge = getReviewStatusBadgeStyle(sub.Review_Status);
+                              return (
+                                <span style={{ 
+                                  padding: '0.15rem 0.4rem', 
+                                  borderRadius: '3px', 
+                                  fontSize: '0.65rem', 
+                                  fontWeight: 700, 
+                                  backgroundColor: badge.bg, 
+                                  color: badge.fg,
+                                  border: `1px solid ${badge.fg}33`
+                                }}>
+                                  {sub.Review_Status}
+                                </span>
+                              );
+                            })()
                           ) : (
                             <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: '0.7rem' }}>Pending</span>
                           )}
                         </td>
                         <td style={{ padding: '0.75rem 1rem', fontSize: '0.75rem' }}>{sub.Reviewed_By || '-'}</td>
                         <td style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', fontStyle: 'italic', whiteSpace: 'normal', maxWidth: '150px' }}>{sub.Review_Remarks || '-'}</td>
+                        <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                          {sub.Photo ? (
+                            <button 
+                              onClick={() => setLightboxPhoto(sub.Photo)}
+                              style={{ background: 'none', border: 'none', color: 'var(--primary-light)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+                              title="View Photo Capture"
+                            >
+                              <Camera size={18} />
+                            </button>
+                          ) : (
+                            <span style={{ color: '#CBD5E1' }}>-</span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })
@@ -1117,8 +1323,7 @@ const SupportInbox = () => {
                                     <tbody>
                                       {group.items.map((sub, i) => {
                                         const subKey = sub.id || (sub.Date_Timestamp + '_' + sub.Submitted_By);
-                                        const getSubStyle = (st) => ({ 'Approved': { bg: '#ECFDF5', fg: '#059669' }, 'Needs Correction': { bg: '#FEF2F2', fg: '#DC2626' } }[st] || { bg: '#FFFBEB', fg: '#D97706' });
-                                        const itmStyle = getSubStyle(sub.Review_Status);
+                                        const itmStyle = getReviewStatusBadgeStyle(sub.Review_Status || 'Pending');
                                         return (
                                           <tr key={subKey || i} style={{ borderBottom: '1px solid #F1F5F9' }}>
                                             <td style={{ padding: '0.6rem 0.5rem' }}>
@@ -1180,8 +1385,7 @@ const SupportInbox = () => {
                   ) : (
                     filteredReviewSubmissions.map((sub, i) => {
                       const subKey = sub.id || (sub.Date_Timestamp + '_' + sub.Submitted_By);
-                      const getRevStyle = (s) => ({ 'Approved': { bg: '#ECFDF5', fg: '#059669' }, 'Needs Correction': { bg: '#FEF2F2', fg: '#DC2626' } }[s] || { bg: '#FFFBEB', fg: '#D97706' });
-                      const style = getRevStyle(sub.Review_Status);
+                      const style = getReviewStatusBadgeStyle(sub.Review_Status || 'Pending');
                       return (
                         <tr key={subKey || i} style={{ borderBottom: '1px solid var(--border-color)' }}>
                           <td style={{ padding: '0.75rem 1rem' }}>

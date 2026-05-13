@@ -227,15 +227,14 @@ const Execution = () => {
     }
 
     // 3. New Granular Filters
-    // 3. New Granular Filters
     if (urlActivityType) {
-      accessible = accessible.filter(c => String(c.Type_of_Activity || '').trim().toLowerCase() === urlActivityType.toLowerCase());
+      accessible = accessible.filter(c => String(c.Type_of_Activity || '').trim().toLowerCase() === String(urlActivityType).trim().toLowerCase());
     }
     if (urlLine) {
-      accessible = accessible.filter(c => String(c.Line_Equipment || '').trim().toLowerCase() === urlLine.toLowerCase());
+      accessible = accessible.filter(c => String(c.Line_Equipment || '').trim().toLowerCase() === String(urlLine).trim().toLowerCase());
     }
     if (urlSubLine) {
-      accessible = accessible.filter(c => String(c.Sub_Line_Equipment || '').trim().toLowerCase() === urlSubLine.toLowerCase());
+      accessible = accessible.filter(c => String(c.Sub_Line_Equipment || '').trim().toLowerCase() === String(urlSubLine).trim().toLowerCase());
     }
 
     // 4. Strict Deduplication (Frequency Integrity)
@@ -340,7 +339,7 @@ const Execution = () => {
       );
     }
     if (selectedComponent !== 'ALL') {
-      filtered = filtered.filter(c => c.Component === selectedComponent);
+      filtered = filtered.filter(c => String(c.Component || '').trim().toLowerCase() === String(selectedComponent).trim().toLowerCase());
     }
     setFilteredChecklists(filtered);
     const initStatus = {};
@@ -394,33 +393,39 @@ const Execution = () => {
       const currentShiftId = getCurrentShift(shiftMaster) || 'General';
       const productionDate = getProductionDate(now, shiftMaster);
 
-      const newRecords = submittedItems.map(c => ({
-        id: `${Date.now()}-${c.id}`,
-        Date: productionDate,
-        Type_of_Activity: c.Type_of_Activity,
-        Line_Equipment: c.Line_Equipment,
-        Sub_Line_Equipment: c.Sub_Line_Equipment,
-        Component: c.Component,
-        Activity_Description: c.Activity_Description,
-        Frequency: c.Frequency,
-        Status: statusUpdates[c.id] || 'Pending',
-        Remark: remarks[c.id] || '',
-        Photo: photos[c.id] || null,
-        SupportDept: supportDetails[c.id]?.dept || '',
-        SupportAssignedTo: supportDetails[c.id]?.assignedTo || '',
-        Document_Number: c.Document_Number || '-',
-        Revision: c.Revision || '-',
-        Last_Revised_Date: c.Last_Revised_Date || '-',
-        Submitted_By: (user?.name || '') + ' (' + (user?.id || '') + ')',
-        Submitted_By_ID: user?.id || '',
-        Date_Timestamp: now.toISOString(),
-        Shift: currentShiftId
-      }));
+      const submissionIdMap = {};
+      const newRecords = submittedItems.map(c => {
+        const generatedId = `${Date.now()}-${c.id}`;
+        submissionIdMap[c.id] = generatedId;
+        return {
+          id: generatedId,
+          Date: productionDate,
+          Type_of_Activity: c.Type_of_Activity,
+          Line_Equipment: c.Line_Equipment,
+          Sub_Line_Equipment: c.Sub_Line_Equipment,
+          Component: c.Component,
+          Activity_Description: c.Activity_Description,
+          Frequency: c.Frequency,
+          Status: statusUpdates[c.id] || 'Pending',
+          Remark: remarks[c.id] || '',
+          Photo: photos[c.id] || null,
+          SupportDept: supportDetails[c.id]?.dept || '',
+          SupportAssignedTo: supportDetails[c.id]?.assignedTo || '',
+          Document_Number: c.Document_Number || '-',
+          Revision: c.Revision || '-',
+          Last_Revised_Date: c.Last_Revised_Date || '-',
+          Submitted_By: (user?.name || '') + ' (' + (user?.id || '') + ')',
+          Submitted_By_ID: user?.id || '',
+          Date_Timestamp: now.toISOString(),
+          Shift: currentShiftId
+        };
+      });
 
       const supportItems = filteredChecklists.filter(c => statusUpdates[c.id] === 'Support Required');
       const newSupport = supportItems.map(c => ({
         id: `support-${Date.now()}-${c.id}`,
         status: 'Open',
+        submissionId: submissionIdMap[c.id] || null,
         location: c.Line_Equipment || c.Sub_Line_Equipment || 'Unknown',
         activity: c.Type_of_Activity,
         taskId: c.id,

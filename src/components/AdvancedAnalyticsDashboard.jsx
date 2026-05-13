@@ -205,12 +205,6 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
         </div>
         
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-          <div className="card" style={{ background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)', color: '#FFFFFF', padding: '1.5rem', border: 'none' }}>
-            <span style={{ ...subTitleStyle, color: '#E0E7FF' }}>Global Compliance</span>
-            <div style={{ fontSize: '2.5rem', fontWeight: 900 }}>{globalKPI.complPct}%</div>
-            <div style={{ fontSize: '0.8rem', color: '#C7D2FE', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}><CheckCircle size={14} /> On-track Operational Score</div>
-          </div>
-
           <div className="card" style={{ background: 'white', border: '1px solid #E2E8F0', padding: '1.5rem' }}>
             <span style={subTitleStyle}>Best Performing Shift</span>
             <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1E293B' }}>Shift {globalKPI.bestShift}</div>
@@ -250,11 +244,11 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700 }}>
                       <div style={{ background: '#F8FAFC', padding: '0.4rem', borderRadius: '6px' }}><div style={{color: '#64748B', fontSize: '0.6rem'}}>Alloc</div>{row.allocated}</div>
-                      <div style={{ background: '#DCFCE7', color: '#166534', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Done</div>{row.done}</div>
-                      <div style={{ background: '#EFF6FF', color: '#2563EB', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>WIP</div>{row.wip || '-'}</div>
-                      <div style={{ background: '#FFFBEB', color: '#D97706', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Hold</div>{row.hold || '-'}</div>
-                      <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Support</div>{row.support || '-'}</div>
-                      <div style={{ background: '#F8FAFC', color: '#64748B', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Pend</div>{row.pending || '-'}</div>
+                      <div style={{ background: '#DCFCE7', color: '#166534', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Done</div>{row.done} <span style={{display: 'block', fontSize: '0.55rem', opacity: 0.8}}>({row.allocated > 0 ? Math.round((row.done/row.allocated)*100) : 0}%)</span></div>
+                      <div style={{ background: '#EFF6FF', color: '#2563EB', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>WIP</div>{row.wip || 0} <span style={{display: 'block', fontSize: '0.55rem', opacity: 0.8}}>({row.allocated > 0 ? Math.round((row.wip/row.allocated)*100) : 0}%)</span></div>
+                      <div style={{ background: '#FFFBEB', color: '#D97706', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Hold</div>{row.hold || 0} <span style={{display: 'block', fontSize: '0.55rem', opacity: 0.8}}>({row.allocated > 0 ? Math.round((row.hold/row.allocated)*100) : 0}%)</span></div>
+                      <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Support</div>{row.support || 0} <span style={{display: 'block', fontSize: '0.55rem', opacity: 0.8}}>({row.allocated > 0 ? Math.round((row.support/row.allocated)*100) : 0}%)</span></div>
+                      <div style={{ background: '#F8FAFC', color: '#64748B', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Pend</div>{row.pending || 0} <span style={{display: 'block', fontSize: '0.55rem', opacity: 0.8}}>({row.allocated > 0 ? Math.round((row.pending/row.allocated)*100) : 0}%)</span></div>
                     </div>
                   </div>
                 );
@@ -282,11 +276,36 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
                       <tr key={row.name} style={{ borderBottom: '1px solid #F1F5F9' }}>
                         <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#334155' }}>{row.name}</td>
                         <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600 }}>{row.allocated}</td>
-                        <td style={{ padding: '0.75rem', textAlign: 'center' }}><span style={{ background: '#DCFCE7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 700 }}>{row.done}</span></td>
-                        <td style={{ padding: '0.75rem', textAlign: 'center', color: row.wip > 0 ? '#2563EB' : '#CBD5E1', fontWeight: row.wip > 0 ? 700 : 400 }}>{row.wip || '-'}</td>
-                        <td style={{ padding: '0.75rem', textAlign: 'center', color: row.hold > 0 ? '#D97706' : '#CBD5E1', fontWeight: row.hold > 0 ? 700 : 400 }}>{row.hold || '-'}</td>
-                        <td style={{ padding: '0.75rem', textAlign: 'center', color: row.support > 0 ? '#DC2626' : '#CBD5E1', fontWeight: row.support > 0 ? 700 : 400 }}>{row.support || '-'}</td>
-                        <td style={{ padding: '0.75rem', textAlign: 'center', color: '#64748B' }}>{row.pending || '-'}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem' }}>
+                            <span style={{ background: '#DCFCE7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 700 }}>{row.done}</span>
+                            <span style={{ fontSize: '0.65rem', color: '#166534', fontWeight: 600 }}>({row.allocated > 0 ? Math.round((row.done / row.allocated) * 100) : 0}%)</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem', color: row.wip > 0 ? '#2563EB' : '#CBD5E1', fontWeight: row.wip > 0 ? 700 : 400 }}>
+                            <span>{row.wip || 0}</span>
+                            <span style={{ fontSize: '0.65rem' }}>({row.allocated > 0 ? Math.round((row.wip / row.allocated) * 100) : 0}%)</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem', color: row.hold > 0 ? '#D97706' : '#CBD5E1', fontWeight: row.hold > 0 ? 700 : 400 }}>
+                            <span>{row.hold || 0}</span>
+                            <span style={{ fontSize: '0.65rem' }}>({row.allocated > 0 ? Math.round((row.hold / row.allocated) * 100) : 0}%)</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem', color: row.support > 0 ? '#DC2626' : '#CBD5E1', fontWeight: row.support > 0 ? 700 : 400 }}>
+                            <span>{row.support || 0}</span>
+                            <span style={{ fontSize: '0.65rem' }}>({row.allocated > 0 ? Math.round((row.support / row.allocated) * 100) : 0}%)</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem', color: '#64748B', fontWeight: 600 }}>
+                            <span>{row.pending || 0}</span>
+                            <span style={{ fontSize: '0.65rem' }}>({row.allocated > 0 ? Math.round((row.pending / row.allocated) * 100) : 0}%)</span>
+                          </div>
+                        </td>
                         <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
                             <div style={{ width: '60px', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
