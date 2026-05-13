@@ -188,6 +188,9 @@ const Logs = () => {
                   <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Status</th>
                   <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Updated By</th>
                   <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Timestamp</th>
+                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Review Status</th>
+                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Reviewed By</th>
+                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Remarks</th>
                 </tr>
               ) : (
                 <tr style={{ color: 'var(--text-secondary)' }}>
@@ -215,6 +218,23 @@ const Logs = () => {
                   </td>
                   <td style={{ padding: '0.75rem 1rem' }}>{sub.Submitted_By || '-'}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--text-tertiary)' }}>{new Date(sub.Date_Timestamp || Date.now()).toLocaleTimeString()}</td>
+                  <td style={{ padding: '0.75rem 1rem' }}>
+                    {sub.Review_Status ? (
+                      <span style={{ 
+                        padding: '0.2rem 0.5rem', 
+                        borderRadius: '4px', 
+                        fontSize: '0.7rem', 
+                        fontWeight: 700, 
+                        backgroundColor: sub.Review_Status === 'Approved' ? '#ECFDF5' : '#FEF2F2', 
+                        color: sub.Review_Status === 'Approved' ? '#059669' : '#DC2626',
+                        border: `1px solid ${sub.Review_Status === 'Approved' ? '#10B98133' : '#EF444433'}`
+                      }}>{sub.Review_Status}</span>
+                    ) : (
+                      <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Pending Review</span>
+                    )}
+                  </td>
+                  <td style={{ padding: '0.75rem 1rem' }}>{sub.Reviewed_By || '-'}</td>
+                  <td style={{ padding: '0.75rem 1rem', fontStyle: 'italic', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={sub.Review_Remarks}>{sub.Review_Remarks || '-'}</td>
                 </tr>
               ))}
 

@@ -17,7 +17,7 @@ import AdvancedAnalyticsDashboard from '../components/AdvancedAnalyticsDashboard
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const { submissions: rawData = [], supportInbox = [], checklists: masterChecklists = [] } = useData();
+  const { submissions: rawData = [], supportInbox = [], checklists: masterChecklists = [], reviewers = [], employees = [] } = useData();
   const [activeTab, setActiveTab] = useState('realtime');
   const [showFilters, setShowFilters] = useState(false);
 
@@ -408,6 +408,61 @@ const Dashboard = () => {
     };
   }, [filteredData, supportInbox]);
 
+  // ----------------------------------------------------
+  // 7. REVIEW PERFORMANCE CALCULATIONS
+  // ----------------------------------------------------
+  const reviewPerformanceStats = useMemo(() => {
+    const assignedReviewLines = [...new Set(reviewers.map(r => r.line_equipment))];
+    const reviewSubmissions = rawData.filter(sub => assignedReviewLines.includes(sub.Line_Equipment));
+    
+    const totalSubmissionsForReview = reviewSubmissions.length;
+    const totalReviewed = reviewSubmissions.filter(sub => sub.Review_Status).length;
+    const totalPendingReview = totalSubmissionsForReview - totalReviewed;
+    const overallReviewCompliance = totalSubmissionsForReview ? Math.round((totalReviewed / totalSubmissionsForReview) * 100) : 100;
+
+    const reviewerMap = {};
+    reviewSubmissions.forEach(sub => {
+      if (sub.Review_Status && sub.Reviewed_By) {
+        const rName = sub.Reviewed_By;
+        if (!reviewerMap[rName]) {
+          reviewerMap[rName] = { name: rName, total: 0, approved: 0, rejected: 0 };
+        }
+        reviewerMap[rName].total += 1;
+        if (sub.Review_Status === 'Approved') {
+          reviewerMap[rName].approved += 1;
+        } else if (sub.Review_Status === 'Needs Correction') {
+          reviewerMap[rName].rejected += 1;
+        }
+      }
+    });
+
+    const reviewerLeaderboard = Object.values(reviewerMap).sort((a, b) => b.total - a.total);
+
+    const reviewStatusData = [
+      { name: 'Approved', value: reviewSubmissions.filter(s => s.Review_Status === 'Approved').length },
+      { name: 'Needs Correction', value: reviewSubmissions.filter(s => s.Review_Status === 'Needs Correction').length },
+      { name: 'Pending', value: totalPendingReview }
+    ].filter(i => i.value > 0);
+
+    const dates = [...new Set(reviewSubmissions.map(r => r.Date).filter(Boolean))].sort().slice(-7);
+    const reviewTrend = dates.map(date => {
+      const dayLogs = reviewSubmissions.filter(r => r.Date === date);
+      const reviewedCount = dayLogs.filter(r => r.Review_Status).length;
+      const pendingCount = dayLogs.length - reviewedCount;
+      return { date, Reviewed: reviewedCount, Pending: pendingCount };
+    });
+
+    return {
+      totalSubmissionsForReview,
+      totalReviewed,
+      totalPendingReview,
+      overallReviewCompliance,
+      reviewerLeaderboard,
+      reviewStatusData,
+      reviewTrend
+    };
+  }, [rawData, reviewers]);
+
   const resetFilters = () => {
     setFilters({ dateStart: '', dateEnd: '', type: 'ALL', line: 'ALL', subLine: 'ALL', frequency: 'ALL', userFilter: '', shift: 'ALL', docNo: 'ALL', revNo: 'ALL' });
   };
@@ -527,7 +582,8 @@ const Dashboard = () => {
           { id: 'workforce', label: '👥 Workforce Performance', icon: Users },
           { id: 'compliance', label: '🧩 Activity & Compliance', icon: ClipboardList },
           { id: 'aging', label: '⏳ Aging Report', icon: FileClock },
-          { id: 'insights', label: '🔮 Alerts & Insights', icon: AlertTriangle }
+          {id: 'insights', label: '🔮 Alerts & Insights', icon: AlertTriangle},
+          {id: 'review_perf', label: '🛡️ Reviewer Performance', icon: Shield}
         ].map(tab => {
           const IconComp = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1287,11 +1343,11 @@ const Dashboard = () => {
                             }}>{isCritical ? 'CRITICAL' : isSevere ? 'ELEVATED' : 'STABLE'}</span>
                           </div>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', backgroundColor: '#F8FAFC', padding: '0.75rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 700, textAlign: 'center' }}>
-                            <div><div style={{color: '#64748B', fontSize: '0.6rem'}}> < 8 HR</div>{row.s1 || '-'}</div>
+                            <div><div style={{color: '#64748B', fontSize: '0.6rem'}}>{' < 8 HR'}</div>{row.s1 || '-'}</div>
                             <div><div style={{color: '#D97706', fontSize: '0.6rem'}}>1-7 DAY</div>{row.s2 || '-'}</div>
                             <div><div style={{color: '#EA580C', fontSize: '0.6rem'}}>8-30 DAY</div>{row.s3 || '-'}</div>
                             <div><div style={{color: '#DC2626', fontSize: '0.6rem'}}>1-6 MO</div>{row.s4 || '-'}</div>
-                            <div><div style={{color: '#991B1B', fontSize: '0.6rem'}}>> 6 MO</div>{row.s5 || '-'}</div>
+                            <div><div style={{color: '#991B1B', fontSize: '0.6rem'}}>{'> 6 MO'}</div>{row.s5 || '-'}</div>
                             <div><div style={{color: '#94A3B8', fontSize: '0.6rem'}}>FREQ</div>{row.freq}</div>
                           </div>
                         </div>
@@ -1354,6 +1410,132 @@ const Dashboard = () => {
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          TAB REVIEW: REVIEWER PERFORMANCE
+          ======================================================== */}
+      {activeTab === 'review_perf' && (
+        <div style={{ display: 'grid', gap: '1.5rem' }}>
+          {/* Reviewer Metrics Overview Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+            <div className="card" style={{ borderLeft: '5px solid #6366F1', padding: '1.5rem', marginBottom: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                <span>Total In Review Pipeline</span>
+                <Shield size={16} />
+              </div>
+              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0.5rem 0' }}>{reviewPerformanceStats.totalSubmissionsForReview}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Total submissions in reviewer scopes</div>
+            </div>
+
+            <div className="card" style={{ borderLeft: '5px solid #10B981', padding: '1.5rem', marginBottom: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                <span>Completed Reviews</span>
+                <CheckCircle size={16} color="#10B981" />
+              </div>
+              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: '#10B981', margin: '0.5rem 0' }}>{reviewPerformanceStats.totalReviewed}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Activities successfully reviewed</div>
+            </div>
+
+            <div className="card" style={{ borderLeft: '5px solid #F59E0B', padding: '1.5rem', marginBottom: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                <span>Pending Review Queue</span>
+                <Clock size={16} color="#F59E0B" />
+              </div>
+              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: '#F59E0B', margin: '0.5rem 0' }}>{reviewPerformanceStats.totalPendingReview}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Waiting for reviewer action</div>
+            </div>
+
+            <div className="card" style={{ borderLeft: '5px solid #3B82F6', padding: '1.5rem', marginBottom: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                <span>Overall Compliance</span>
+                <Award size={16} color="#3B82F6" />
+              </div>
+              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: '#3B82F6', margin: '0.5rem 0' }}>{reviewPerformanceStats.overallReviewCompliance}%</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Percentage of completed reviews</div>
+            </div>
+          </div>
+
+          {/* Mid row graphs */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+            {/* Leaderboard Card */}
+            <div className="card" style={{ marginBottom: 0 }}>
+              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
+                <Users size={18} color="#10B981" /> Top Reviewers Performance
+              </h3>
+              {reviewPerformanceStats.reviewerLeaderboard.length === 0 ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>No reviewers have completed reviews yet.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '320px', overflowY: 'auto' }}>
+                  {reviewPerformanceStats.reviewerLeaderboard.map((reviewer, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid #F1F5F9' }}>
+                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                        <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem' }}>#{idx+1}</div>
+                        <div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>{reviewer.name}</div>
+                          <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.65rem', marginTop: '0.15rem' }}>
+                            <span style={{ color: '#059669', fontWeight: 600 }}>{reviewer.approved} Approved</span>
+                            <span style={{ color: '#DC2626', fontWeight: 600 }}>{reviewer.rejected} Rejected</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#1E293B' }}>{reviewer.total}</div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>TOTAL REVIEWS</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Status breakdown Pie */}
+            <div className="card" style={{ marginBottom: 0 }}>
+              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
+                <Activity size={18} color="#6366F1" /> Review Status Distribution
+              </h3>
+              <div style={{ height: '280px', position: 'relative' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={reviewPerformanceStats.reviewStatusData}
+                      cx="50%" cy="50%"
+                      innerRadius={60} outerRadius={80}
+                      paddingAngle={4}
+                      dataKey="value"
+                    >
+                      {reviewPerformanceStats.reviewStatusData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.name === 'Approved' ? '#10B981' : entry.name === 'Needs Correction' ? '#EF4444' : '#F59E0B'} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend verticalAlign="bottom" height={36} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom chart */}
+          <div className="card" style={{ padding: '1.5rem' }}>
+            <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
+              <TrendingUp size={18} color="var(--primary-light)" /> 7-Day Review Trend
+            </h3>
+            <div style={{ height: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={reviewPerformanceStats.reviewTrend}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                  <XAxis dataKey="date" fontSize={10} axisLine={false} tickLine={false} />
+                  <YAxis fontSize={10} axisLine={false} tickLine={false} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="Reviewed" stackId="a" fill="#10B981" name="Reviewed Tasks" />
+                  <Bar dataKey="Pending" stackId="a" fill="#F59E0B" name="Unreviewed/Pending" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Upload, FileText, CheckCircle2, XCircle, ClipboardList, Download, List, Trash2, Power, PowerOff, Search, X, Filter, Settings } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, XCircle, ClipboardList, Download, List, Trash2, Power, PowerOff, Search, X, Filter, Settings, Shield } from 'lucide-react';
 import FrequencyMaster from '../components/FrequencyMaster';
+import ReviewersMaster from '../components/ReviewersMaster';
 import { parseCSV, validateChecklist } from '../utils/csvParser';
 import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
@@ -184,9 +185,15 @@ const UploadChecklist = () => {
           style={{ padding: '0.75rem 1rem', borderBottom: activeTab === 'freq' ? '2px solid var(--primary-light)' : 'none', color: activeTab === 'freq' ? 'var(--primary-light)' : 'var(--text-secondary)', fontWeight: activeTab === 'freq' ? 600 : 400, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Settings size={18} /> Frequency Master
         </div>
+        <div 
+          onClick={() => setActiveTab('reviewers')}
+          style={{ padding: '0.75rem 1rem', borderBottom: activeTab === 'reviewers' ? '2px solid var(--primary-light)' : 'none', color: activeTab === 'reviewers' ? 'var(--primary-light)' : 'var(--text-secondary)', fontWeight: activeTab === 'reviewers' ? 600 : 400, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Shield size={18} /> Reviewers Master
+        </div>
       </div>
 
       {activeTab === 'freq' && <FrequencyMaster />}
+      {activeTab === 'reviewers' && <ReviewersMaster />}
 
       {activeTab === 'upload' && (
         <div className="card">

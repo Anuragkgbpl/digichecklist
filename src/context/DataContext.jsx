@@ -13,6 +13,7 @@ export const DataProvider = ({ children }) => {
   const [activities, setActivities] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [frequencies, setFrequencies] = useState([]);
+  const [reviewers, setReviewers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -61,6 +62,11 @@ export const DataProvider = ({ children }) => {
       setFrequencies(val ? Object.values(val).filter(Boolean) : []);
     });
 
+    // 10. Sync Reviewers
+    const unsubReviewers = syncData('reviewers', (val) => {
+      setReviewers(val ? Object.values(val).filter(Boolean) : []);
+    });
+
     setLoading(false);
 
     return () => {
@@ -73,6 +79,7 @@ export const DataProvider = ({ children }) => {
       unsubActivities();
       unsubShifts();
       unsubFreqs();
+      unsubReviewers();
     };
   }, []);
 
@@ -83,7 +90,7 @@ export const DataProvider = ({ children }) => {
 
   return (
     <DataContext.Provider value={{ 
-      employees, checklists, units, submissions, supportInbox, logs, activities, shifts, frequencies,
+      employees, checklists, units, submissions, supportInbox, logs, activities, shifts, frequencies, reviewers,
       updateFirebase, loading 
     }}>
       {children}
