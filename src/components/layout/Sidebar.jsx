@@ -27,7 +27,7 @@ const Sidebar = ({ isOpen, setIsOpen, currentUnit }) => {
           {currentUnit && currentUnit.logo ? (
             <img src={currentUnit.logo} alt="Logo" style={{ height: '32px', marginRight: '0.75rem', objectFit: 'contain' }} />
           ) : (
-            <Leaf size={24} color={currentUnit?.themeColor || "#10B981"} style={{ marginRight: '0.75rem' }} />
+            <img src="/logo.png" alt="Logo" style={{ height: '32px', marginRight: '0.75rem', objectFit: 'contain', borderRadius: '6px' }} />
           )}
           <h2>{currentUnit ? currentUnit.name : 'Master Console'}</h2>
         </div>

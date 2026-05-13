@@ -14,6 +14,93 @@ import { getProductionDate, getFrequencyPeriodRange, getCurrentShift } from '../
 const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6'];
 const STATUS_COLORS = { Done: '#10B981', WIP: '#3B82F6', Hold: '#F59E0B', Overdue: '#EF4444', Pending: '#94A3B8' };
 
+// Helper Component for Shuffling Frequency Trend Line Graphs (Extracted to Top Level to prevent re-creation cycles)
+const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions }) => {
+  const [activeFreq, setActiveFreq] = useState('ALL');
+
+  const trend = useMemo(() => {
+    const dates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return d.toISOString().split('T')[0];
+    });
+
+    let source = submissions;
+    if (activeFreq && activeFreq !== 'ALL') {
+      source = source.filter(s => 
+        String(s.Frequency || '').trim().toLowerCase() === activeFreq.trim().toLowerCase()
+      );
+    }
+
+    const counts = {};
+    source.forEach(s => {
+      const val = s[pivotKey];
+      if (val && val !== '-' && val !== 'Unknown') counts[val] = (counts[val] || 0) + 1;
+    });
+    const topEntities = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(e => e[0]);
+
+    const chartData = dates.map(dt => {
+      const dayLogs = source.filter(s => {
+        const checkDate = (s.Date_Timestamp || s.Date || '').split('T')[0];
+        return checkDate === dt;
+      });
+      const label = dt.split('-').reverse().join('/');
+      const row = { name: label };
+      topEntities.forEach(ent => {
+        row[ent] = dayLogs.filter(l => l[pivotKey] === ent && l.Status === 'Done').length;
+      });
+      return row;
+    });
+
+    return { chartData, topEntities };
+  }, [activeFreq, submissions, pivotKey]);
+
+  return (
+    <div className="card" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>
+          {Icon && <Icon size={16} color="#6366F1" />} {title}
+        </div>
+        <select 
+          value={activeFreq} 
+          onChange={e => setActiveFreq(e.target.value)}
+          style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', borderRadius: '6px', border: '1px solid #CBD5E1', cursor: 'pointer', outline: 'none', fontWeight: 600, backgroundColor: '#FFF' }}
+        >
+          <option value="ALL">Freq: ALL</option>
+          <option value="Daily">Daily</option>
+          <option value="Shift-wise">Shift-wise</option>
+          <option value="Weekly">Weekly</option>
+          <option value="Monthly">Monthly</option>
+        </select>
+      </div>
+      
+      {trend.topEntities.length === 0 ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', fontSize: '0.8rem', fontStyle: 'italic' }}>
+          No trend data identified for selected filters.
+        </div>
+      ) : (
+        <div style={{ height: '220px', width: '100%' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={trend.chartData} margin={{ top: 5, right: 10, left: -30, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+              <XAxis dataKey="name" fontSize={9} tickLine={false} axisLine={false} />
+              <YAxis fontSize={9} tickLine={false} axisLine={false} allowDecimals={false} />
+              <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '8px' }} />
+              <Legend iconType="circle" wrapperStyle={{ fontSize: '9px', paddingTop: '10px' }} />
+              {trend.topEntities.map((ent, i) => (
+                <Line key={ent} type="monotone" dataKey={ent} stroke={COLORS[i % COLORS.length]} strokeWidth={2.5} dot={{ r: 2 }} activeDot={{ r: 4 }} name={ent} />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] }) => {
   const { submissions: rawAllSub = [], checklists: rawAllCheck = [], shifts = [] } = useData();
   const [trendPivot, setTrendPivot] = useState('shift');
@@ -225,92 +312,7 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
   const cardHeaderStyle = { display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid #F1F5F9', paddingBottom: '0.75rem', color: '#1E293B' };
   const subTitleStyle = { fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 600, color: '#64748B', letterSpacing: '0.05em', display: 'block', marginBottom: '0.25rem' };
 
-  // Helper Component for Shuffling Frequency Trend Line Graphs
-  const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon }) => {
-    const [activeFreq, setActiveFreq] = useState('ALL');
 
-    const trend = useMemo(() => {
-      const dates = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (6 - i));
-        return d.toISOString().split('T')[0];
-      });
-
-      let source = submissions;
-      if (activeFreq && activeFreq !== 'ALL') {
-        source = source.filter(s => 
-          String(s.Frequency || '').trim().toLowerCase() === activeFreq.trim().toLowerCase()
-        );
-      }
-
-      const counts = {};
-      source.forEach(s => {
-        const val = s[pivotKey];
-        if (val && val !== '-' && val !== 'Unknown') counts[val] = (counts[val] || 0) + 1;
-      });
-      const topEntities = Object.entries(counts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(e => e[0]);
-
-      const chartData = dates.map(dt => {
-        const dayLogs = source.filter(s => {
-          const checkDate = (s.Date_Timestamp || s.Date || '').split('T')[0];
-          return checkDate === dt;
-        });
-        const label = dt.split('-').reverse().join('/');
-        const row = { name: label };
-        topEntities.forEach(ent => {
-          row[ent] = dayLogs.filter(l => l[pivotKey] === ent && l.Status === 'Done').length;
-        });
-        return row;
-      });
-
-      return { chartData, topEntities };
-    }, [activeFreq, submissions]);
-
-    return (
-      <div className="card" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>
-            {Icon && <Icon size={16} color="#6366F1" />} {title}
-          </div>
-          <select 
-            value={activeFreq} 
-            onChange={e => setActiveFreq(e.target.value)}
-            style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', borderRadius: '6px', border: '1px solid #CBD5E1', cursor: 'pointer', outline: 'none', fontWeight: 600, backgroundColor: '#FFF' }}
-          >
-            <option value="ALL">Freq: ALL</option>
-            <option value="Daily">Daily</option>
-            <option value="Shift-wise">Shift-wise</option>
-            <option value="Weekly">Weekly</option>
-            <option value="Monthly">Monthly</option>
-          </select>
-        </div>
-        
-        {trend.topEntities.length === 0 ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', fontSize: '0.8rem', fontStyle: 'italic' }}>
-            No trend data identified for selected filters.
-          </div>
-        ) : (
-          <div style={{ height: '220px', width: '100%' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trend.chartData} margin={{ top: 5, right: 10, left: -30, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis dataKey="name" fontSize={9} tickLine={false} axisLine={false} />
-                <YAxis fontSize={9} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '8px' }} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '9px', paddingTop: '10px' }} />
-                {trend.topEntities.map((ent, i) => (
-                  <Line key={ent} type="monotone" dataKey={ent} stroke={COLORS[i % COLORS.length]} strokeWidth={2.5} dot={{ r: 2 }} activeDot={{ r: 4 }} name={ent} />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', paddingBottom: '3rem' }}>
@@ -694,10 +696,10 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem' }}>
-          <DynamicDimensionTrend title="Daily Trend: Type of Activity" pivotKey="Type_of_Activity" icon={Activity} />
-          <DynamicDimensionTrend title="Daily Trend: Line Equipment" pivotKey="Line_Equipment" icon={Layers} />
-          <DynamicDimensionTrend title="Daily Trend: Sub-Line Equipment" pivotKey="Sub_Line_Equipment" icon={Map} />
-          <DynamicDimensionTrend title="Daily Trend: Components" pivotKey="Component" icon={Settings} />
+          <DynamicDimensionTrend title="Daily Trend: Type of Activity" pivotKey="Type_of_Activity" icon={Activity} submissions={submissions} />
+          <DynamicDimensionTrend title="Daily Trend: Line Equipment" pivotKey="Line_Equipment" icon={Layers} submissions={submissions} />
+          <DynamicDimensionTrend title="Daily Trend: Sub-Line Equipment" pivotKey="Sub_Line_Equipment" icon={Map} submissions={submissions} />
+          <DynamicDimensionTrend title="Daily Trend: Components" pivotKey="Component" icon={Settings} submissions={submissions} />
         </div>
       </div>
     </div>
