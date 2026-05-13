@@ -254,8 +254,8 @@ const Login = () => {
       <div className="login-card">
         {/* Left Side: Info & Theme */}
         <div className="login-left">
-            <div style={{ backgroundColor: '#FFF', padding: '0.25rem', borderRadius: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #D1FAE5' }}>
-              <img src="/logo.png" alt="Brand" style={{ height: '32px', objectFit: 'contain', borderRadius: '6px' }} />
+            <div style={{ backgroundColor: '#FFF', borderRadius: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #D1FAE5', overflow: 'hidden' }}>
+              <img src="/logo.png" alt="Brand" style={{ height: '42px', width: '42px', objectFit: 'cover' }} />
             </div>
             <span style={{ fontWeight: 800, color: '#065F46', fontSize: '1.25rem' }}>Digital checklist</span>
           <h2 style={{ fontSize: '2.75rem', fontWeight: 900, lineHeight: 1.1, color: '#065F46', marginBottom: '1.5rem' }}>
@@ -299,8 +299,8 @@ const Login = () => {
               />
             </div>
           ) : (
-            <div style={{ backgroundColor: '#FFF', padding: '0.5rem', borderRadius: '1.25rem', marginBottom: '2rem', boxShadow: '0 15px 35px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #E2E8F0' }}>
-              <img src="/logo.png" alt="App Logo" style={{ height: '64px', width: '64px', objectFit: 'contain', borderRadius: '12px' }} />
+            <div style={{ backgroundColor: '#FFF', borderRadius: '1.5rem', marginBottom: '2rem', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #E2E8F0', overflow: 'hidden' }}>
+              <img src="/logo.png" alt="App Logo" style={{ height: '96px', width: '96px', objectFit: 'cover' }} />
             </div>
           )}
 
