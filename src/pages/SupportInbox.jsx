@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Inbox, CheckCircle, AlertTriangle, Send, Shield, Camera, X } from 'lucide-react';
+import { Inbox, CheckCircle, AlertTriangle, Send, Shield, Camera, X, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 
@@ -30,7 +31,7 @@ const formatDateDDMMYYYY = (dateStr) => {
 
 const SupportInbox = () => {
   const { user } = useAuth();
-  const { supportInbox = [], updateFirebase, employees = [], submissions = [], reviewers = [], logs = [] } = useData();
+  const { supportInbox = [], updateFirebase, patchFirebase, appendFirebase, employees = [], submissions = [], reviewers = [], logs = [] } = useData();
   const [adminReply, setAdminReply] = useState({});
   const [userReply, setUserReply] = useState({});
   const [userAction, setUserAction] = useState({});
@@ -169,51 +170,53 @@ const SupportInbox = () => {
     const remark = revRemarks[submissionId] || '';
     if (!status) { alert('Please choose review status'); return; }
     
-    // Update submission status
-    const updatedSubmissions = submissions.map(sub => {
-      const subKey = sub.id || (sub.Date_Timestamp + '_' + sub.Submitted_By);
-      if (subKey === submissionId) {
-        const nextStatus = computeNextReviewStatus(sub, status);
-        return {
-          ...sub,
-          Review_Status: nextStatus,
-          Review_Remarks: remark,
-          Reviewed_By: user?.name || user?.id,
-          Reviewed_By_ID: user?.id,
-          Reviewed_Date: new Date().toISOString(),
-          Review_History: [
-            ...(sub.Review_History || []),
-            {
-              status: nextStatus,
-              remark: remark,
-              by: user?.name || user?.id,
-              by_id: user?.id,
-              date: new Date().toISOString()
-            }
-          ]
-        };
-      }
-      return sub;
-    });
-
     const targetSub = submissions.find(sub => {
       const subKey = sub.id || (sub.Date_Timestamp + '_' + sub.Submitted_By);
       return subKey === submissionId;
     });
 
-    // Create Log entry
-    const nextStatusCalculated = targetSub ? computeNextReviewStatus(targetSub, status) : status;
-    const newLog = {
-      id: 'log_' + Date.now(),
-      timestamp: new Date().toISOString(),
-      type: 'Review Update',
-      user: user?.name || user?.id,
-      action: `Reviewed activity on ${targetSub?.Line_Equipment}: ${nextStatusCalculated}`,
-      details: `Remarks: ${remark}. Component: ${targetSub?.Component}.`
+    if (!targetSub) {
+      alert('Record could not be found.');
+      return;
+    }
+
+    const nextStatus = computeNextReviewStatus(targetSub, status);
+    const now = new Date().toISOString();
+    const fbKey = targetSub._fbKey;
+
+    if (fbKey === undefined) {
+      alert('Operational Error: Record location key is not indexed. Full reload recommended.');
+      return;
+    }
+
+    const newHistItem = {
+      status: nextStatus,
+      remark: remark,
+      by: user?.name || user?.id,
+      by_id: user?.id,
+      date: now
     };
 
-    await updateFirebase('submissions', updatedSubmissions);
-    await updateFirebase('logs', [...logs, newLog]);
+    const patchPayload = {
+      [`${fbKey}/Review_Status`]: nextStatus,
+      [`${fbKey}/Review_Remarks`]: remark,
+      [`${fbKey}/Reviewed_By`]: user?.name || user?.id,
+      [`${fbKey}/Reviewed_By_ID`]: user?.id,
+      [`${fbKey}/Reviewed_Date`]: now,
+      [`${fbKey}/Review_History`]: [...(targetSub.Review_History || []), newHistItem]
+    };
+
+    const newLog = {
+      id: 'log_' + Date.now(),
+      timestamp: now,
+      type: 'Review Update',
+      user: user?.name || user?.id,
+      action: `Reviewed activity on ${targetSub.Line_Equipment}: ${nextStatus}`,
+      details: `Remarks: ${remark}. Component: ${targetSub.Component}.`
+    };
+
+    await patchFirebase('submissions', patchPayload);
+    await appendFirebase('logs', [newLog]);
 
     // Clear UI state for that submission
     setRevRemarks(prev => {
@@ -231,51 +234,66 @@ const SupportInbox = () => {
 
   const handleBulkApprove = async (groupKey, items) => {
     const remark = bulkRemarksInput[groupKey] || '';
-    
-    const updatedSubmissions = submissions.map(sub => {
-      const currentKey = `${sub.Date}_${sub.Shift || 'Gen'}_${sub.Line_Equipment}_${sub.Frequency || 'Daily'}`;
-      if (currentKey === groupKey) {
-        const nextStatus = computeNextReviewStatus(sub, 'Approved');
-        return {
-          ...sub,
-          Review_Status: nextStatus,
-          Review_Remarks: remark || sub.Review_Remarks || 'Approved in bulk',
-          Reviewed_By: user?.name || user?.id,
-          Reviewed_By_ID: user?.id,
-          Reviewed_Date: new Date().toISOString(),
-          Review_History: [
-            ...(sub.Review_History || []),
-            {
-              status: nextStatus,
-              remark: remark || 'Approved in bulk',
-              by: user?.name || user?.id,
-              by_id: user?.id,
-              date: new Date().toISOString()
-            }
-          ]
+    const now = new Date().toISOString();
+    const patchPayload = {};
+    let validKeysCount = 0;
+
+    items.forEach(item => {
+      const cleanLine = String(item.Line_Equipment || '').trim().toLowerCase();
+      const currentStatus = item.Review_Status || 'Pending';
+      const isL1 = reviewerRoles.L1.includes(cleanLine);
+      const isL2 = reviewerRoles.L2.includes(cleanLine);
+      const isL3 = reviewerRoles.L3.includes(cleanLine);
+      
+      let isPendingAtMyLevel = false;
+      if (isL1 && currentStatus === 'Pending') isPendingAtMyLevel = true;
+      if (isL2 && currentStatus === 'L1 Approved') isPendingAtMyLevel = true;
+      if (isL3 && currentStatus === 'L2 Approved') isPendingAtMyLevel = true;
+
+      if (isPendingAtMyLevel && item._fbKey !== undefined) {
+        const nextStatus = computeNextReviewStatus(item, 'Approved');
+        const fbKey = item._fbKey;
+        const newHistItem = {
+          status: nextStatus,
+          remark: remark || 'Approved in bulk',
+          by: user?.name || user?.id,
+          by_id: user?.id,
+          date: now
         };
+
+        patchPayload[`${fbKey}/Review_Status`] = nextStatus;
+        patchPayload[`${fbKey}/Review_Remarks`] = remark || item.Review_Remarks || 'Approved in bulk';
+        patchPayload[`${fbKey}/Reviewed_By`] = user?.name || user?.id;
+        patchPayload[`${fbKey}/Reviewed_By_ID`] = user?.id;
+        patchPayload[`${fbKey}/Reviewed_Date`] = now;
+        patchPayload[`${fbKey}/Review_History`] = [...(item.Review_History || []), newHistItem];
+        validKeysCount++;
       }
-      return sub;
     });
+
+    if (validKeysCount === 0) {
+      alert('No pending items found at your validation level.');
+      return;
+    }
 
     const auditLog = {
       id: 'log_' + Date.now(),
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       type: 'Bulk Review',
       user: user?.name || user?.id,
-      action: `Bulk Approved ${items.length} items on ${items[0]?.Line_Equipment || 'Line'}`,
+      action: `Bulk Approved ${validKeysCount} items on ${items[0]?.Line_Equipment || 'Line'}`,
       details: `Date: ${items[0]?.Date}, Shift: ${items[0]?.Shift}, Remarks: ${remark}`
     };
 
-    await updateFirebase('submissions', updatedSubmissions);
-    await updateFirebase('logs', [...logs, auditLog]);
+    await patchFirebase('submissions', patchPayload);
+    await appendFirebase('logs', [auditLog]);
     
     setBulkRemarksInput(prev => {
       const copy = {...prev};
       delete copy[groupKey];
       return copy;
     });
-    alert(`Bulk approved ${items.length} activities.`);
+    alert(`Bulk approved ${validKeysCount} activities.`);
   };
 
   const filteredReviewSubmissions = useMemo(() => {
@@ -718,17 +736,109 @@ const SupportInbox = () => {
     return { mostPendingEmp: mostPendingEmp || 'N/A', topAllocator: topAllocator || 'N/A', mostRepeatedJob: mostRepeatedJob || 'N/A' };
   }, [supportInbox, isAdmin]);
 
+  const exportToExcel = () => {
+    let rawData = [];
+    let sheetName = 'Data';
+    let sanitizedData = [];
+
+    if (activeTab === 'submission_logs') {
+      rawData = filteredSubmissions;
+      sheetName = 'Submission Logs';
+      sanitizedData = rawData.map(item => ({
+        'Date': formatDateDDMMYYYY(item.Date),
+        'Shift': item.Shift || 'Gen',
+        'Type of Activity': item.Type_of_Activity || '-',
+        'Component': item.Component || '-',
+        'Activity Description': item.Activity_Description || '-',
+        'Doc Number': item.Document_Number || '-',
+        'Revision': item.Revision || '-',
+        'Status': item.Status || '-',
+        'Submitted By': item.Submitted_By || '-',
+        'Timestamp': item.Date_Timestamp ? new Date(item.Date_Timestamp).toLocaleString() : '-',
+        'Review Status': item.Review_Status || 'Pending',
+        'Reviewed By': item.Reviewed_By || '-',
+        'Review Remarks': item.Review_Remarks || '-',
+        'Has Photo': item.Photo ? 'Yes' : 'No'
+      }));
+    } else if (activeTab === 'review_inbox') {
+      rawData = revViewMode === 'summary' ? reviewSummaryGroups : filteredReviewSubmissions;
+      sheetName = 'Review Inbox';
+      if (revViewMode === 'summary') {
+        sanitizedData = rawData.map(g => ({
+          'Date': formatDateDDMMYYYY(g.date),
+          'Shift': g.shift || 'Gen',
+          'Line/Equipment': g.line || '-',
+          'Frequency': g.frequency || '-',
+          'Total Activities': g.totalCount || 0,
+          'Approved Count': g.approvedCount || 0,
+          'Rejected Count': g.rejectedCount || 0,
+          'Pending Count': g.pendingCount || 0,
+          'Submitted By Users': (g.users || []).join(', '),
+          'Overall Status': g.statusSummary
+        }));
+      } else {
+        sanitizedData = rawData.map(sub => ({
+          'Date': formatDateDDMMYYYY(sub.Date),
+          'Shift': sub.Shift || 'Gen',
+          'Frequency': sub.Frequency || '-',
+          'Line': sub.Line_Equipment || '-',
+          'Component': sub.Component || '-',
+          'Activity Description': sub.Activity_Description || '-',
+          'Submitted By': sub.Submitted_By || '-',
+          'Current Review Status': sub.Review_Status || 'Pending',
+          'Reviewed By': sub.Reviewed_By || '-',
+          'Review Remarks': sub.Review_Remarks || '-',
+          'Has Photo': sub.Photo ? 'Yes' : 'No'
+        }));
+      }
+    } else {
+      rawData = inbox;
+      sheetName = activeTab.replace(/_/g, ' ').toUpperCase();
+      sanitizedData = rawData.map(req => ({
+        'Timestamp': req.timestamp ? new Date(req.timestamp).toLocaleString() : '-',
+        'Location': req.location || '-',
+        'Activity': req.activity || '-',
+        'Component': req.component || '-',
+        'Activity Description': req.activityDescription || '-',
+        'Status': req.status || 'Open',
+        'Department': req.department || '-',
+        'Assigned To': req.assignedTo || '-',
+        'Submitted By': req.submittedBy || '-',
+        'Remark': req.remark || '-',
+        'Admin Note': req.adminNote || '-',
+        'Resolved At': req.resolvedAt ? new Date(req.resolvedAt).toLocaleString() : '-',
+        'Is Critical': req.isCritical ? 'Yes' : 'No',
+        'Has Photo': req.photo ? 'Yes' : 'No'
+      }));
+    }
+
+    if (sanitizedData.length === 0) {
+      alert('No records found to export.');
+      return;
+    }
+
+    const ws = XLSX.utils.json_to_sheet(sanitizedData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.writeFile(wb, `SupportInbox_${activeTab}_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
         <h2 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
           <Inbox /> Support Inbox
         </h2>
-        {isAdmin && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#EFF6FF', padding: '0.4rem 0.75rem', borderRadius: 'var(--border-radius-sm)', fontSize: '0.8rem', color: 'var(--primary-dark)', fontWeight: 600 }}>
-            <Shield size={14} /> Admin View — All Requests
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <button className="btn btn-secondary" onClick={exportToExcel} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}>
+            <Download size={16} /> Export to Excel
+          </button>
+          {isAdmin && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#EFF6FF', padding: '0.4rem 0.75rem', borderRadius: 'var(--border-radius-sm)', fontSize: '0.8rem', color: 'var(--primary-dark)', fontWeight: 600 }}>
+              <Shield size={14} /> Admin View — All Requests
+            </div>
+          )}
+        </div>
       </div>
 
       {isAdmin && activeTab === 'all' && (
@@ -1299,20 +1409,29 @@ const SupportInbox = () => {
                             </td>
                             <td style={{ padding: '0.75rem 1rem' }}>
                               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                <input 
-                                  type="text" 
-                                  placeholder="Bulk remarks..."
-                                  value={bulkRemarksInput[group.key] || ''}
-                                  onChange={e => setBulkRemarksInput({...bulkRemarksInput, [group.key]: e.target.value})}
-                                  style={{ flex: 1, padding: '0.3rem', fontSize: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px' }}
-                                />
-                                <button 
-                                  onClick={() => handleBulkApprove(group.key, group.items)}
-                                  className="btn"
-                                  style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', backgroundColor: '#059669', color: '#FFF', border: 'none', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', borderRadius: '4px' }}
-                                >
-                                  ✓ Approve All
-                                </button>
+                                {group.pendingCount > 0 && (
+                                  <>
+                                    <input 
+                                      type="text" 
+                                      placeholder="Bulk remarks..."
+                                      value={bulkRemarksInput[group.key] || ''}
+                                      onChange={e => setBulkRemarksInput({...bulkRemarksInput, [group.key]: e.target.value})}
+                                      style={{ flex: 1, padding: '0.3rem', fontSize: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+                                    />
+                                    <button 
+                                      onClick={() => handleBulkApprove(group.key, group.items)}
+                                      className="btn"
+                                      style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', backgroundColor: '#059669', color: '#FFF', border: 'none', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', borderRadius: '4px' }}
+                                    >
+                                      ✓ Approve All
+                                    </button>
+                                  </>
+                                )}
+                                {group.pendingCount === 0 && (
+                                  <div style={{ flex: 1, fontSize: '0.75rem', color: '#059669', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    ✓ Fully Reviewed
+                                  </div>
+                                )}
                                 <button 
                                   onClick={() => setExpandedReviewGroup(isExpanded ? null : group.key)}
                                   className="btn"

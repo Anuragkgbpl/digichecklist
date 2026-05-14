@@ -118,8 +118,42 @@ const Logs = () => {
   };
 
   const exportToExcel = () => {
-    const data = activeTab === 'submissions' ? getFilteredSubmissions() : getFilteredAudit();
-    const ws = XLSX.utils.json_to_sheet(data);
+    const rawData = activeTab === 'submissions' ? getFilteredSubmissions() : getFilteredAudit();
+    
+    // Sanitize and format data to avoid Excel cell limits (e.g. base64 images in Photo field)
+    const sanitizedData = rawData.map(item => {
+      if (activeTab === 'submissions') {
+        return {
+          'Date': formatDateDDMMYYYY(item.Date),
+          'Shift': item.Shift || 'Gen',
+          'Type of Activity': item.Type_of_Activity || '-',
+          'Line/Equipment': item.Line_Equipment || '-',
+          'Sub-Line': item.Sub_Line_Equipment || '-',
+          'Component': item.Component || '-',
+          'Activity Description': item.Activity_Description || '-',
+          'Frequency': item.Frequency || '-',
+          'Doc Number': item.Document_Number || '-',
+          'Revision': item.Revision || '-',
+          'Status': item.Status || '-',
+          'Submitted By': item.Submitted_By || '-',
+          'Timestamp': item.Date_Timestamp ? new Date(item.Date_Timestamp).toLocaleString() : '-',
+          'Review Status': item.Review_Status || 'Pending',
+          'Reviewed By': item.Reviewed_By || '-',
+          'Review Remarks': item.Review_Remarks || '-',
+          'Has Photo': item.Photo ? 'Yes' : 'No'
+        };
+      } else {
+        return {
+          'Timestamp': item.timestamp ? new Date(item.timestamp).toLocaleString() : '-',
+          'Type': item.type || 'System',
+          'User/Actor': item.user || 'System Auto',
+          'Action': item.action || '-',
+          'Details': item.details || '-'
+        };
+      }
+    });
+
+    const ws = XLSX.utils.json_to_sheet(sanitizedData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Logs');
     XLSX.writeFile(wb, `${activeTab}_export_${new Date().toISOString().split('T')[0]}.xlsx`);

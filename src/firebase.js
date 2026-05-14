@@ -29,3 +29,12 @@ export const saveData = async (path, data) => {
 export const updateData = async (path, data) => {
   await update(ref(db, path), data);
 };
+
+export const pushData = async (path, record) => {
+  await push(ref(db, path), record);
+};
+
+// Atomically writes multiple new records under a path with their own keys (highly optimized append)
+export const batchAppendData = async (path, recordsObj) => {
+  await update(ref(db, path), recordsObj);
+};

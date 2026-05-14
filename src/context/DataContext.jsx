@@ -1,7 +1,18 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, syncData, saveData } from '../firebase';
+import { db, syncData, saveData, updateData, pushData, batchAppendData } from '../firebase';
 
 const DataContext = createContext(null);
+
+const mapFirebaseValues = (val) => {
+  if (!val) return [];
+  return Object.entries(val).map(([key, item]) => {
+    if (!item) return null;
+    if (typeof item === 'object') {
+      return { ...item, _fbKey: key };
+    }
+    return item;
+  }).filter(Boolean);
+};
 
 export const DataProvider = ({ children }) => {
   const [employees, setEmployees] = useState([]);
@@ -19,52 +30,52 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     // 1. Sync Employees
     const unsubEmployees = syncData('employees', (val) => {
-      setEmployees(val ? Object.values(val).filter(Boolean) : []);
+      setEmployees(mapFirebaseValues(val));
     });
 
     // 2. Sync Checklists
     const unsubChecklists = syncData('checklists', (val) => {
-      setChecklists(val ? Object.values(val).filter(Boolean) : []);
+      setChecklists(mapFirebaseValues(val));
     });
 
     // 3. Sync Units
     const unsubUnits = syncData('units', (val) => {
-      setUnits(val ? Object.values(val).filter(Boolean) : []);
+      setUnits(mapFirebaseValues(val));
     });
 
     // 4. Sync Submissions
     const unsubSubmissions = syncData('submissions', (val) => {
-      setSubmissions(val ? Object.values(val).filter(Boolean) : []);
+      setSubmissions(mapFirebaseValues(val));
     });
 
     // 5. Sync Support Inbox
     const unsubSupport = syncData('support_inbox', (val) => {
-      setSupportInbox(val ? Object.values(val).filter(Boolean) : []);
+      setSupportInbox(mapFirebaseValues(val));
     });
 
     // 6. Sync Logs
     const unsubLogs = syncData('logs', (val) => {
-      setLogs(val ? Object.values(val).filter(Boolean) : []);
+      setLogs(mapFirebaseValues(val));
     });
 
     // 7. Sync Activities
     const unsubActivities = syncData('activities', (val) => {
-      setActivities(val ? Object.values(val).filter(Boolean) : []);
+      setActivities(mapFirebaseValues(val));
     });
 
     // 8. Sync Shifts
     const unsubShifts = syncData('shifts', (val) => {
-      setShifts(val ? Object.values(val).filter(Boolean) : []);
+      setShifts(mapFirebaseValues(val));
     });
 
     // 9. Sync Frequencies
     const unsubFreqs = syncData('frequencies', (val) => {
-      setFrequencies(val ? Object.values(val).filter(Boolean) : []);
+      setFrequencies(mapFirebaseValues(val));
     });
 
     // 10. Sync Reviewers
     const unsubReviewers = syncData('reviewers', (val) => {
-      setReviewers(val ? Object.values(val).filter(Boolean) : []);
+      setReviewers(mapFirebaseValues(val));
     });
 
     setLoading(false);
@@ -88,10 +99,26 @@ export const DataProvider = ({ children }) => {
     await saveData(collection, data);
   };
 
+  // Highly optimized function to PATCH specific fields of existing records atomically
+  const patchFirebase = async (collection, updates) => {
+    await updateData(collection, updates);
+  };
+
+  // Highly optimized function to APPEND multiple new records to a collection atomically
+  const appendFirebase = async (collection, newRecordsArray) => {
+    const payload = {};
+    newRecordsArray.forEach(rec => {
+      // Use record.id if present, otherwise fallback to a timestamp-based key
+      const key = rec.id || `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      payload[key] = rec;
+    });
+    await batchAppendData(collection, payload);
+  };
+
   return (
     <DataContext.Provider value={{ 
       employees, checklists, units, submissions, supportInbox, logs, activities, shifts, frequencies, reviewers,
-      updateFirebase, loading 
+      updateFirebase, patchFirebase, appendFirebase, loading 
     }}>
       {children}
     </DataContext.Provider>

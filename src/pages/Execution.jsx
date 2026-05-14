@@ -113,6 +113,7 @@ const Execution = () => {
     supportInbox: cloudSupport = [], 
     logs: cloudLogs = [],
     updateFirebase, 
+    appendFirebase,
     employees = [],
     shifts: cloudShifts = [],
     loading: dataLoading
@@ -448,23 +449,23 @@ const Execution = () => {
         timestamp: now.toISOString()
       }));
 
-      // Submit all to Firebase
+      // Submit all to Firebase atomically without full rewrite
       if (newRecords.length > 0) {
-        await updateFirebase('submissions', [...cloudSubmissions, ...newRecords]);
+        await appendFirebase('submissions', newRecords);
       }
       if (newSupport.length > 0) {
-        await updateFirebase('support_inbox', [...cloudSupport, ...newSupport]);
+        await appendFirebase('support_inbox', newSupport);
       }
 
-      // Log the action
-      const newLogs = [...(cloudLogs || []), {
-        id: Date.now(),
-        user: user?.name,
+      // Log the action atomically
+      const actionLog = {
+        id: `${Date.now()}`,
+        user: user?.name || user?.id || 'System',
         action: `Submitted ${newRecords.length} ${selectedFrequency} checklists`,
         timestamp: now.toISOString(),
         type: 'Execution'
-      }];
-      await updateFirebase('logs', newLogs);
+      };
+      await appendFirebase('logs', [actionLog]);
 
       setIsSubmitting(false);
       setSubmitSuccess(true);
