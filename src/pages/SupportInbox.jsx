@@ -31,7 +31,7 @@ const formatDateDDMMYYYY = (dateStr) => {
 
 const SupportInbox = () => {
   const { user } = useAuth();
-  const { supportInbox = [], updateFirebase, patchFirebase, appendFirebase, employees = [], submissions = [], reviewers = [], logs = [] } = useData();
+  const { supportInbox = [], updateFirebase, patchFirebase, appendFirebase, employees = [], submissions = [], reviewers = [], logs = [], checklists: masterChecklists = [], shifts = [] } = useData();
   const [adminReply, setAdminReply] = useState({});
   const [userReply, setUserReply] = useState({});
   const [userAction, setUserAction] = useState({});
@@ -152,19 +152,23 @@ const SupportInbox = () => {
   const [logStartDate, setLogStartDate] = useState('');
   const [logEndDate, setLogEndDate] = useState('');
   const [logShiftFilter, setLogShiftFilter] = useState('all');
-  const [logDocFilter, setLogDocFilter] = useState('');
-  const [logSubmittedByFilter, setLogSubmittedByFilter] = useState('');
+  const [logDocFilter, setLogDocFilter] = useState('all');
+  const [logSubmittedByFilter, setLogSubmittedByFilter] = useState('all');
   const [logDescFilter, setLogDescFilter] = useState('');
   const [logActivityTypeFilter, setLogActivityTypeFilter] = useState('all');
-  const [logLineFilter, setLogLineFilter] = useState('');
-  const [logSubLineFilter, setLogSubLineFilter] = useState('');
-  const [logComponentFilter, setLogComponentFilter] = useState('');
+  const [logLineFilter, setLogLineFilter] = useState('all');
+  const [logSubLineFilter, setLogSubLineFilter] = useState('all');
+  const [logComponentFilter, setLogComponentFilter] = useState('all');
+  const [logRevFilter, setLogRevFilter] = useState('all');
   const [logFreqFilter, setLogFreqFilter] = useState('all');
   const [logStatusFilter, setLogStatusFilter] = useState('all');
 
-  const activityTypes = useMemo(() => {
-    return ['all', ...new Set(submissions.map(s => s.Type_of_Activity).filter(Boolean))];
-  }, [submissions]);
+  const activityTypesList = useMemo(() => {
+    return [...new Set([
+      ...submissions.map(s => s.Type_of_Activity),
+      ...masterChecklists.map(c => c.Type_of_Activity)
+    ].filter(Boolean))].sort();
+  }, [submissions, masterChecklists]);
 
   const computeNextReviewStatus = (sub, requestedStatus) => {
     if (requestedStatus !== 'Approved') return requestedStatus; // e.g. 'Needs Correction'
@@ -449,33 +453,33 @@ const SupportInbox = () => {
       }
       
       // Doc Number filter
-      if (logDocFilter) {
-        const q = logDocFilter.toLowerCase();
-        if (!(sub.Document_Number || '').toLowerCase().includes(q)) return false;
+      if (logDocFilter !== 'all') {
+        if (sub.Document_Number !== logDocFilter) return false;
       }
       
       // Submitted By filter
-      if (logSubmittedByFilter) {
-        const q = logSubmittedByFilter.toLowerCase();
-        if (!(sub.Submitted_By || '').toLowerCase().includes(q)) return false;
+      if (logSubmittedByFilter !== 'all') {
+        if (sub.Submitted_By !== logSubmittedByFilter) return false;
       }
 
       // Line filter
-      if (logLineFilter) {
-        const q = logLineFilter.toLowerCase();
-        if (!(sub.Line_Equipment || '').toLowerCase().includes(q)) return false;
+      if (logLineFilter !== 'all') {
+        if (sub.Line_Equipment !== logLineFilter) return false;
       }
 
       // Sub-Line filter
-      if (logSubLineFilter) {
-        const q = logSubLineFilter.toLowerCase();
-        if (!(sub.Sub_Line_Equipment || '').toLowerCase().includes(q)) return false;
+      if (logSubLineFilter !== 'all') {
+        if (sub.Sub_Line_Equipment !== logSubLineFilter) return false;
       }
 
       // Component filter
-      if (logComponentFilter) {
-        const q = logComponentFilter.toLowerCase();
-        if (!(sub.Component || '').toLowerCase().includes(q)) return false;
+      if (logComponentFilter !== 'all') {
+        if (sub.Component !== logComponentFilter) return false;
+      }
+
+      // Revision filter
+      if (logRevFilter !== 'all') {
+        if (String(sub.Revision) !== String(logRevFilter)) return false;
       }
 
       // Freq filter
@@ -497,7 +501,7 @@ const SupportInbox = () => {
       
       return true;
     }).reverse();
-  }, [submissions, activeTab, logStartDate, logEndDate, logShiftFilter, logDocFilter, logSubmittedByFilter, logDescFilter, logActivityTypeFilter, logLineFilter, logSubLineFilter, logComponentFilter, logFreqFilter, logStatusFilter]);
+  }, [submissions, activeTab, logStartDate, logEndDate, logShiftFilter, logDocFilter, logSubmittedByFilter, logDescFilter, logActivityTypeFilter, logLineFilter, logSubLineFilter, logComponentFilter, logRevFilter, logFreqFilter, logStatusFilter]);
 
   const getDuration = (start, end) => {
     if (!start) return '-';
@@ -1022,12 +1026,11 @@ const SupportInbox = () => {
           
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', alignItems: 'end' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>MY ASSIGNED SCOPE</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>MY ASSIGNED SCOPE</label>
               <select 
                 value={revLineFilter} 
                 onChange={e => setRevLineFilter(e.target.value)} 
-                className="select-input" 
-                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
               >
                 <option value="all">All My Assignments</option>
                 {reviewerLines.map(line => <option key={line} value={line}>{line}</option>)}
@@ -1035,39 +1038,43 @@ const SupportInbox = () => {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>FREQUENCY</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>FREQUENCY</label>
               <select 
                 value={revFreqFilter} 
                 onChange={e => setRevFreqFilter(e.target.value)} 
-                className="select-input" 
-                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
               >
                 <option value="all">All Frequencies</option>
-                {['Daily', 'Shift-wise', 'Weekly', 'Monthly'].map(f => <option key={f} value={f}>{f}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>ACTIVITY TYPE</label>
-              <select 
-                value={revTypeFilter} 
-                onChange={e => setRevTypeFilter(e.target.value)} 
-                className="select-input" 
-                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
-              >
-                {activityTypes.map(type => (
-                  <option key={type} value={type}>{type === 'all' ? 'All Activities' : type}</option>
+                {[...new Set([
+                  'Daily', 'Shift-wise', 'Weekly', 'Fortnightly', 'Monthly', 'Quarterly',
+                  ...submissions.map(d => d.Frequency),
+                  ...masterChecklists.map(d => d.Frequency)
+                ].filter(Boolean))].map(f => (
+                  <option key={f} value={f}>{f}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>REVIEW STATUS</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>ACTIVITY TYPE</label>
+              <select 
+                value={revTypeFilter} 
+                onChange={e => setRevTypeFilter(e.target.value)} 
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+              >
+                <option value="all">All Activities</option>
+                {activityTypesList.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>REVIEW STATUS</label>
               <select 
                 value={revStatusFilter} 
                 onChange={e => setRevStatusFilter(e.target.value)} 
-                className="select-input" 
-                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
               >
                 <option value="all">All Status</option>
                 <option value="Pending">Pending Review</option>
@@ -1086,164 +1093,203 @@ const SupportInbox = () => {
         </div>
       )}
 
-      {/* Submission Logs Filters */}
       {activeTab === 'submission_logs' && (
         <div className="card" style={{ backgroundColor: '#F8FAFC', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.25rem', marginBottom: '1.5rem' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', alignItems: 'end' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>DESCRIPTION SEARCH</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>DESCRIPTION SEARCH</label>
               <input 
                 type="text" 
                 placeholder="Search description..." 
                 value={logDescFilter} 
                 onChange={e => setLogDescFilter(e.target.value)} 
-                className="login-input" 
-                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }} 
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }} 
               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>ACTIVITY TYPE</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>ACTIVITY TYPE</label>
               <select 
                 value={logActivityTypeFilter} 
                 onChange={e => setLogActivityTypeFilter(e.target.value)} 
-                className="select-input" 
-                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
               >
-                {activityTypes.map(type => (
-                  <option key={type} value={type}>{type === 'all' ? 'All Activities' : type}</option>
+                <option value="all">All Activities</option>
+                {activityTypesList.map(type => (
+                  <option key={type} value={type}>{type}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>SHIFT</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>SHIFT</label>
               <select 
                 value={logShiftFilter} 
                 onChange={e => setLogShiftFilter(e.target.value)} 
-                className="select-input" 
-                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
               >
                 <option value="all">All Shifts</option>
-                <option value="A">Shift A</option>
-                <option value="B">Shift B</option>
-                <option value="C">Shift C</option>
-                <option value="G">Shift G</option>
-                <option value="Gen">Gen</option>
+                {[...new Set([
+                  ...(shifts && shifts.length > 0 ? shifts.map(s => s.id) : ['A', 'B', 'C', 'G']),
+                  ...submissions.map(d => d.Shift)
+                ].filter(Boolean))].map(s => (
+                  <option key={s} value={s}>Shift {s}</option>
+                ))}
               </select>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>DOC NUMBER</label>
-              <input 
-                type="text" 
-                placeholder="Doc No..." 
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>DOC NUMBER</label>
+              <select 
                 value={logDocFilter} 
                 onChange={e => setLogDocFilter(e.target.value)} 
-                className="login-input" 
-                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }} 
-              />
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+              >
+                <option value="all">All Docs</option>
+                {[...new Set([
+                  ...submissions.map(d => d.Document_Number), 
+                  ...masterChecklists.map(d => d.Document_Number)
+                ].filter(d => d && d !== '-'))].sort().map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>SUBMITTED BY</label>
-              <input 
-                type="text" 
-                placeholder="Name or ID..." 
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>REVISION</label>
+              <select 
+                value={logRevFilter} 
+                onChange={e => setLogRevFilter(e.target.value)} 
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+              >
+                <option value="all">All Revs</option>
+                {[...new Set([
+                  ...submissions.map(d => d.Revision),
+                  ...masterChecklists.map(d => d.Revision)
+                ].filter(r => r !== undefined && r !== null && r !== ''))].sort().map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>SUBMITTED BY</label>
+              <select 
                 value={logSubmittedByFilter} 
                 onChange={e => setLogSubmittedByFilter(e.target.value)} 
-                className="login-input" 
-                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }} 
-              />
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+              >
+                <option value="all">All Users</option>
+                {[...new Set([
+                  ...employees.map(emp => emp.Employee_Name),
+                  ...submissions.map(d => d.Submitted_By)
+                ].filter(Boolean))].sort().map(usr => (
+                  <option key={usr} value={usr}>{usr}</option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>LINE</label>
-              <input 
-                type="text" 
-                placeholder="Line..." 
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>LINE</label>
+              <select 
                 value={logLineFilter} 
                 onChange={e => setLogLineFilter(e.target.value)} 
-                className="login-input" 
-                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }} 
-              />
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+              >
+                <option value="all">All Lines</option>
+                {[...new Set([
+                  ...submissions.map(d => d.Line_Equipment), 
+                  ...masterChecklists.map(d => d.Line_Equipment)
+                ].filter(Boolean))].sort().map(line => (
+                  <option key={line} value={line}>{line}</option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>SUB-LINE</label>
-              <input 
-                type="text" 
-                placeholder="Sub-Line..." 
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>SUB-LINE</label>
+              <select 
                 value={logSubLineFilter} 
                 onChange={e => setLogSubLineFilter(e.target.value)} 
-                className="login-input" 
-                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }} 
-              />
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+              >
+                <option value="all">All Sub-Lines</option>
+                {[...new Set([
+                  ...submissions.map(d => d.Sub_Line_Equipment), 
+                  ...masterChecklists.map(d => d.Sub_Line_Equipment)
+                ].filter(Boolean))].sort().map(sub => (
+                  <option key={sub} value={sub}>{sub}</option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>COMPONENT</label>
-              <input 
-                type="text" 
-                placeholder="Component..." 
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>COMPONENT</label>
+              <select 
                 value={logComponentFilter} 
                 onChange={e => setLogComponentFilter(e.target.value)} 
-                className="login-input" 
-                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', width: '100%' }} 
-              />
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+              >
+                <option value="all">All Components</option>
+                {[...new Set([
+                  ...submissions.map(d => d.Component), 
+                  ...masterChecklists.map(d => d.Component)
+                ].filter(Boolean))].sort().map(comp => (
+                  <option key={comp} value={comp}>{comp}</option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>FREQUENCY</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>FREQUENCY</label>
               <select 
                 value={logFreqFilter} 
                 onChange={e => setLogFreqFilter(e.target.value)} 
-                className="select-input" 
-                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
               >
                 <option value="all">All Frequencies</option>
-                <option value="daily">Daily</option>
-                <option value="shift">Shift</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
+                {[...new Set([
+                  'Daily', 'Shift-wise', 'Weekly', 'Fortnightly', 'Monthly', 'Quarterly',
+                  ...submissions.map(d => d.Frequency),
+                  ...masterChecklists.map(d => d.Frequency)
+                ].filter(Boolean))].map(f => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
               </select>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>STATUS</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>STATUS</label>
               <select 
                 value={logStatusFilter} 
                 onChange={e => setLogStatusFilter(e.target.value)} 
-                className="select-input" 
-                style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+                style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
               >
                 <option value="all">All Status</option>
-                <option value="done">Done</option>
-                <option value="wip">In Progress</option>
-                <option value="hold">Hold</option>
-                <option value="support required">Support Required</option>
+                <option value="Done">Done</option>
+                <option value="WIP">In Progress</option>
+                <option value="Hold">Hold</option>
+                <option value="Support Required">Support Required</option>
               </select>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>START DATE</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>START DATE</label>
               <input 
                 type="date" 
                 value={logStartDate} 
                 onChange={e => setLogStartDate(e.target.value)} 
-                className="login-input" 
-                style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem', width: '100%' }} 
+                style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }} 
               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>END DATE</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>END DATE</label>
               <input 
                 type="date" 
                 value={logEndDate} 
                 onChange={e => setLogEndDate(e.target.value)} 
-                className="login-input" 
-                style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem', width: '100%' }} 
+                style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }} 
               />
             </div>
 
@@ -1252,13 +1298,14 @@ const SupportInbox = () => {
                 setLogStartDate(''); 
                 setLogEndDate(''); 
                 setLogShiftFilter('all'); 
-                setLogDocFilter(''); 
-                setLogSubmittedByFilter(''); 
+                setLogDocFilter('all'); 
+                setLogSubmittedByFilter('all'); 
                 setLogDescFilter(''); 
                 setLogActivityTypeFilter('all'); 
-                setLogLineFilter(''); 
-                setLogSubLineFilter(''); 
-                setLogComponentFilter(''); 
+                setLogLineFilter('all'); 
+                setLogSubLineFilter('all'); 
+                setLogComponentFilter('all'); 
+                setLogRevFilter('all');
                 setLogFreqFilter('all'); 
                 setLogStatusFilter('all');
               }}
