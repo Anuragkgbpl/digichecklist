@@ -15,8 +15,17 @@ const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'
 const STATUS_COLORS = { Done: '#10B981', WIP: '#3B82F6', Hold: '#F59E0B', Overdue: '#EF4444', Pending: '#94A3B8' };
 
 // Helper Component for Shuffling Frequency Trend Line Graphs (Extracted to Top Level to prevent re-creation cycles)
-const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions }) => {
+const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions, filterKey, filterLabel }) => {
   const [activeFreq, setActiveFreq] = useState('ALL');
+  const [activeSubFilter, setActiveSubFilter] = useState('ALL');
+
+  // Compute available filter options for this specific parent dimension
+  const subFilterOptions = useMemo(() => {
+    if (!filterKey) return [];
+    const unique = [...new Set(submissions.map(s => s[filterKey]).filter(x => x && x !== '-'))];
+    unique.sort((a, b) => String(a).localeCompare(String(b)));
+    return unique;
+  }, [submissions, filterKey]);
 
   const trend = useMemo(() => {
     const dates = Array.from({ length: 7 }, (_, i) => {
@@ -26,9 +35,18 @@ const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions }) => 
     });
 
     let source = submissions;
+    
+    // 1. Filter by active frequency
     if (activeFreq && activeFreq !== 'ALL') {
       source = source.filter(s => 
         String(s.Frequency || '').trim().toLowerCase() === activeFreq.trim().toLowerCase()
+      );
+    }
+    
+    // 2. Filter by the requested dimension parent filter
+    if (filterKey && activeSubFilter && activeSubFilter !== 'ALL') {
+      source = source.filter(s => 
+        String(s[filterKey] || '').trim().toLowerCase() === activeSubFilter.trim().toLowerCase()
       );
     }
 
@@ -56,7 +74,7 @@ const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions }) => 
     });
 
     return { chartData, topEntities };
-  }, [activeFreq, submissions, pivotKey]);
+  }, [activeFreq, activeSubFilter, submissions, pivotKey, filterKey]);
 
   return (
     <div className="card" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column' }}>
@@ -64,17 +82,30 @@ const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions }) => 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>
           {Icon && <Icon size={16} color="#6366F1" />} {title}
         </div>
-        <select 
-          value={activeFreq} 
-          onChange={e => setActiveFreq(e.target.value)}
-          style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', borderRadius: '6px', border: '1px solid #CBD5E1', cursor: 'pointer', outline: 'none', fontWeight: 600, backgroundColor: '#FFF' }}
-        >
-          <option value="ALL">Freq: ALL</option>
-          <option value="Daily">Daily</option>
-          <option value="Shift-wise">Shift-wise</option>
-          <option value="Weekly">Weekly</option>
-          <option value="Monthly">Monthly</option>
-        </select>
+        <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+          {filterKey && subFilterOptions.length > 0 && (
+            <select 
+              value={activeSubFilter} 
+              onChange={e => setActiveSubFilter(e.target.value)}
+              style={{ padding: '0.25rem 0.4rem', fontSize: '0.68rem', borderRadius: '6px', border: '1px solid #CBD5E1', cursor: 'pointer', outline: 'none', fontWeight: 600, backgroundColor: '#FFF', maxWidth: '95px' }}
+              title={`Filter by ${filterLabel}`}
+            >
+              <option value="ALL">{filterLabel}: ALL</option>
+              {subFilterOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          )}
+          <select 
+            value={activeFreq} 
+            onChange={e => setActiveFreq(e.target.value)}
+            style={{ padding: '0.25rem 0.4rem', fontSize: '0.68rem', borderRadius: '6px', border: '1px solid #CBD5E1', cursor: 'pointer', outline: 'none', fontWeight: 600, backgroundColor: '#FFF' }}
+          >
+            <option value="ALL">Freq: ALL</option>
+            <option value="Daily">Daily</option>
+            <option value="Shift-wise">Shift-wise</option>
+            <option value="Weekly">Weekly</option>
+            <option value="Monthly">Monthly</option>
+          </select>
+        </div>
       </div>
       
       {trend.topEntities.length === 0 ? (
@@ -151,6 +182,45 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
       };
     }).sort((a,b) => b.allocated - a.allocated);
 
+    // Frequency-Wise Details Grid requested by USER
+    const freqs = [...new Set([...checklists.map(c => c.Frequency), ...submissions.map(s => s.Frequency)].filter(Boolean))];
+    const freqOrder = ['Shift-wise', 'Daily', 'Weekly', 'Fortnightly', 'Monthly', 'Quarterly', 'Yearly'];
+    const sortedFreqs = freqs.sort((a, b) => {
+      const idxA = freqOrder.indexOf(a);
+      const idxB = freqOrder.indexOf(b);
+      if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+      if (idxA === -1) return 1;
+      if (idxB === -1) return -1;
+      return idxA - idxB;
+    });
+
+    const frequencyDetailGrid = sortedFreqs.map(f => {
+      const alloc = checklists.filter(c => c.Frequency === f).length;
+      const acts = submissions.filter(s => s.Frequency === f);
+      return {
+        name: f,
+        allocated: alloc,
+        done: acts.filter(a => a.Status === 'Done').length,
+        pending: acts.filter(a => a.Status === 'Pending').length,
+        wip: acts.filter(a => a.Status === 'WIP').length,
+        hold: acts.filter(a => a.Status === 'Hold').length,
+        support: acts.filter(a => a.Status === 'Support Required' || a.Status === 'Support').length,
+        isCumulative: false
+      };
+    });
+
+    // Append Cumulative Total Row
+    frequencyDetailGrid.push({
+      name: 'Cumulative (Total)',
+      allocated: checklists.length,
+      done: submissions.filter(a => a.Status === 'Done').length,
+      pending: submissions.filter(a => a.Status === 'Pending').length,
+      wip: submissions.filter(a => a.Status === 'WIP').length,
+      hold: submissions.filter(a => a.Status === 'Hold').length,
+      support: submissions.filter(a => a.Status === 'Support Required' || a.Status === 'Support').length,
+      isCumulative: true
+    });
+
     // Shift Distribution
     const shiftDist = ['A','B','C','G'].map(s => ({
       shift: `Shift ${s}`,
@@ -161,7 +231,7 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
     // Type Distribution simple for small charts
     const typeBreakdown = activityDetailGrid.slice(0, 5).map(x => ({ name: x.name, count: x.done }));
 
-    return { done, pending, triggered, shiftDist, typeBreakdown, activityDetailGrid };
+    return { done, pending, triggered, shiftDist, typeBreakdown, activityDetailGrid, frequencyDetailGrid };
   }, [submissions, checklists, prodDateStr]);
 
   // 2. OVERDUE AGING ANALYSIS
@@ -233,23 +303,20 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
     return heat;
   }, [submissions]);
 
-  // 7. LINE RELIABILITY 
+  // 7. LINE RELIABILITY (Real mathematical execution efficiency: Completed triggered submissions / Total triggered submissions)
   const lineReliability = useMemo(() => {
     const map = {};
-    checklists.forEach(c => {
-      const ln = c.Line_Equipment || 'Unknown';
-      if(!map[ln]) map[ln] = { line: ln, total: 0, completed: 0 };
-      map[ln].total++;
-    });
     submissions.forEach(s => {
       const ln = s.Line_Equipment || 'Unknown';
-      if(map[ln] && s.Status === 'Done') map[ln].completed++;
+      if(!map[ln]) map[ln] = { line: ln, total: 0, completed: 0 };
+      map[ln].total++;
+      if(s.Status === 'Done') map[ln].completed++;
     });
     return Object.values(map).map(l => ({
       ...l,
-      efficiency: Math.round((l.completed / Math.max(1, l.total)) * 100)
+      efficiency: l.total > 0 ? Math.round((l.completed / l.total) * 100) : 0
     })).sort((a,b) => a.efficiency - b.efficiency).slice(0, 5);
-  }, [checklists, submissions]);
+  }, [submissions]);
 
   // 8. EXCEPTION STATS
   const exceptionStats = useMemo(() => {
@@ -344,23 +411,24 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
           </div>
         </div>
 
-        {/* All Activity Type Compliance Breakdown */}
+        {/* Frequency Compliance & Detailed Backlog */}
         <div className="card" style={{ marginTop: '1.5rem', borderTop: '1px solid #E2E8F0', padding: '1.25rem' }}>
           <div style={{ ...cardHeaderStyle, border: 'none', padding: 0, marginBottom: '1rem' }}>
-            <Layers size={18} color="#6366F1" /> Activity-Wise Realization & Detailed Backlog 
+            <Layers size={18} color="#6366F1" /> Frequency-Wise Realization & Detailed Backlog 
           </div>
           {isMobile ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {coreStats.activityDetailGrid.map(row => {
+              {coreStats.frequencyDetailGrid.map(row => {
                 const completedRate = Math.min(100, row.allocated > 0 ? Math.round((row.done / row.allocated) * 100) : 0);
+                const isCum = row.isCumulative;
                 return (
-                  <div key={row.name} style={{ border: '1px solid #E2E8F0', borderRadius: '10px', padding: '0.85rem' }}>
+                  <div key={row.name} style={{ border: isCum ? '2px solid #3B82F6' : '1px solid #E2E8F0', borderRadius: '10px', padding: '0.85rem', backgroundColor: isCum ? '#EFF6FF' : 'white' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#334155' }}>{row.name}</span>
-                      <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 800 }}>{completedRate}% Done</span>
+                      <span style={{ fontWeight: isCum ? 800 : 700, fontSize: '0.85rem', color: isCum ? '#1E3A8A' : '#334155' }}>{row.name}</span>
+                      <span style={{ fontSize: '0.75rem', color: isCum ? '#1D4ED8' : '#64748B', fontWeight: 800 }}>{completedRate}% Done</span>
                     </div>
                     <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.75rem' }}>
-                      <div style={{ width: `${completedRate}%`, height: '100%', backgroundColor: '#6366F1' }} />
+                      <div style={{ width: `${completedRate}%`, height: '100%', backgroundColor: isCum ? '#2563EB' : '#6366F1' }} />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700 }}>
                       <div style={{ background: '#F8FAFC', padding: '0.4rem', borderRadius: '6px' }}><div style={{color: '#64748B', fontSize: '0.6rem'}}>Alloc</div>{row.allocated}</div>
@@ -379,7 +447,7 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#F8FAFC', color: '#475569' }}>
-                    <th style={{ padding: '0.6rem 1rem', borderRadius: '6px 0 0 6px' }}>Activity Type</th>
+                    <th style={{ padding: '0.6rem 1rem', borderRadius: '6px 0 0 6px' }}>Frequency / Period</th>
                     <th style={{ padding: '0.6rem', textAlign: 'center' }}>Allocated (Baseline)</th>
                     <th style={{ padding: '0.6rem', textAlign: 'center', color: '#10B981' }}>Completed</th>
                     <th style={{ padding: '0.6rem', textAlign: 'center', color: '#3B82F6' }}>WIP</th>
@@ -390,11 +458,17 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
                   </tr>
                 </thead>
                 <tbody>
-                  {coreStats.activityDetailGrid.map(row => {
+                  {coreStats.frequencyDetailGrid.map(row => {
                     const completedRate = Math.min(100, row.allocated > 0 ? Math.round((row.done / row.allocated) * 100) : 0);
+                    const isCum = row.isCumulative;
                     return (
-                      <tr key={row.name} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                        <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#334155' }}>{row.name}</td>
+                      <tr key={row.name} style={{ 
+                        borderBottom: isCum ? 'none' : '1px solid #F1F5F9', 
+                        backgroundColor: isCum ? '#EFF6FF' : 'transparent',
+                        fontWeight: isCum ? 700 : 400,
+                        borderTop: isCum ? '2px solid #3B82F6' : 'none'
+                      }}>
+                        <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: isCum ? '#1E3A8A' : '#334155' }}>{row.name}</td>
                         <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600 }}>{row.allocated}</td>
                         <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem' }}>
@@ -421,7 +495,7 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
                           </div>
                         </td>
                         <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem', color: '#64748B', fontWeight: 600 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem', color: isCum ? '#1E3A8A' : '#64748B', fontWeight: 600 }}>
                             <span>{row.pending || 0}</span>
                             <span style={{ fontSize: '0.65rem' }}>({row.allocated > 0 ? Math.round((row.pending / row.allocated) * 100) : 0}%)</span>
                           </div>
@@ -429,9 +503,9 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
                         <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
                             <div style={{ width: '60px', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
-                              <div style={{ width: `${completedRate}%`, height: '100%', backgroundColor: '#6366F1' }} />
+                              <div style={{ width: `${completedRate}%`, height: '100%', backgroundColor: isCum ? '#2563EB' : '#6366F1' }} />
                             </div>
-                            <span style={{ fontSize: '0.7rem', color: '#64748B', width: '30px' }}>{completedRate}%</span>
+                            <span style={{ fontSize: '0.7rem', color: isCum ? '#1E3A8A' : '#64748B', width: '30px' }}>{completedRate}%</span>
                           </div>
                         </td>
                       </tr>
@@ -696,10 +770,10 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem' }}>
-          <DynamicDimensionTrend title="Daily Trend: Type of Activity" pivotKey="Type_of_Activity" icon={Activity} submissions={submissions} />
-          <DynamicDimensionTrend title="Daily Trend: Line Equipment" pivotKey="Line_Equipment" icon={Layers} submissions={submissions} />
-          <DynamicDimensionTrend title="Daily Trend: Sub-Line Equipment" pivotKey="Sub_Line_Equipment" icon={Map} submissions={submissions} />
-          <DynamicDimensionTrend title="Daily Trend: Components" pivotKey="Component" icon={Settings} submissions={submissions} />
+          <DynamicDimensionTrend title="Daily Trend: Type of Activity" pivotKey="Type_of_Activity" icon={Activity} submissions={submissions} filterKey="Line_Equipment" filterLabel="Line" />
+          <DynamicDimensionTrend title="Daily Trend: Line Equipment" pivotKey="Line_Equipment" icon={Layers} submissions={submissions} filterKey="Type_of_Activity" filterLabel="Act. Type" />
+          <DynamicDimensionTrend title="Daily Trend: Sub-Line Equipment" pivotKey="Sub_Line_Equipment" icon={Map} submissions={submissions} filterKey="Line_Equipment" filterLabel="Line" />
+          <DynamicDimensionTrend title="Daily Trend: Components" pivotKey="Component" icon={Settings} submissions={submissions} filterKey="Sub_Line_Equipment" filterLabel="Sub-Line" />
         </div>
       </div>
     </div>

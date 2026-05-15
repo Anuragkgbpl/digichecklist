@@ -17,7 +17,7 @@ import AdvancedAnalyticsDashboard from '../components/AdvancedAnalyticsDashboard
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const { submissions: rawData = [], supportInbox = [], checklists: masterChecklists = [], reviewers = [], employees = [] } = useData();
+  const { submissions: rawData = [], supportInbox = [], checklists: masterChecklists = [], reviewers = [], employees = [], shifts = [] } = useData();
   const [activeTab, setActiveTab] = useState('realtime');
   const [showFilters, setShowFilters] = useState(false);
 
@@ -85,7 +85,7 @@ const Dashboard = () => {
       if (filters.userFilter && !(item.Submitted_By || '').toLowerCase().includes(filters.userFilter.toLowerCase())) return false;
       if (filters.shift !== 'ALL' && item.Shift !== filters.shift) return false;
       if (filters.docNo !== 'ALL' && item.Document_Number !== filters.docNo) return false;
-      if (filters.revNo !== 'ALL' && item.Revision_Number !== filters.revNo) return false;
+      if (filters.revNo !== 'ALL' && item.Revision !== filters.revNo) return false;
       
       // Year & Month isolation checks
       if (filters.year !== 'ALL') {
@@ -108,7 +108,7 @@ const Dashboard = () => {
       if (filters.subLine !== 'ALL' && item.Sub_Line_Equipment !== filters.subLine) return false;
       if (filters.frequency && filters.frequency !== 'ALL' && item.Frequency !== filters.frequency) return false;
       if (filters.docNo !== 'ALL' && item.Document_Number !== filters.docNo) return false;
-      if (filters.revNo !== 'ALL' && item.Revision_Number !== filters.revNo) return false;
+      if (filters.revNo !== 'ALL' && item.Revision !== filters.revNo) return false;
       return true;
     });
   }, [masterChecklists, filters]);
@@ -118,7 +118,8 @@ const Dashboard = () => {
   // ----------------------------------------------------
   const realTimeStats = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
-    const todaySubmissions = rawData.filter(r => r.Date === todayStr);
+    // Align today's snapshots to the currently selected layout filters
+    const todaySubmissions = filteredData.filter(r => r.Date === todayStr);
 
     const completedToday = todaySubmissions.filter(r => r.Status === 'Done').length;
     const wipToday = todaySubmissions.filter(r => r.Status === 'WIP').length;
@@ -128,11 +129,24 @@ const Dashboard = () => {
     // Active users contribution
     const activeUsers = [...new Set(todaySubmissions.map(r => r.Submitted_By).filter(Boolean))];
 
-    // Carry forward tasks: WIP or Pending items from previous dates
-    const carryForward = rawData.filter(r => r.Date < todayStr && (r.Status === 'WIP' || r.Status === 'Pending')).length;
+    // Carry forward tasks: WIP or Pending items from previous dates respecting filters
+    const carryForward = filteredData.filter(r => r.Date < todayStr && (r.Status === 'WIP' || r.Status === 'Pending')).length;
 
-    // Average resolution time (TAT) from support tickets
-    const resolvedSupport = supportInbox.filter(s => s.status === 'Resolved' && s.resolvedAt);
+    // Helper to check if support tickets match filters
+    const matchesFilter = (val, filterVal) => {
+      if (!filterVal || filterVal === 'ALL') return true;
+      return String(val || '').trim().toLowerCase() === String(filterVal).trim().toLowerCase();
+    };
+
+    // Average resolution time (TAT) from filtered support tickets
+    const resolvedSupport = supportInbox.filter(s => {
+      if (s.status !== 'Resolved' || !s.resolvedAt) return false;
+      if (!matchesFilter(s.Type_of_Activity, filters.type)) return false;
+      if (!matchesFilter(s.Line_Equipment, filters.line)) return false;
+      if (!matchesFilter(s.Shift, filters.shift)) return false;
+      return true;
+    });
+    
     let avgSupportHrs = 0;
     if (resolvedSupport.length > 0) {
       const sumHrs = resolvedSupport.reduce((acc, curr) => {
@@ -149,9 +163,9 @@ const Dashboard = () => {
       pendingToday,
       activeUsersCount: activeUsers.length || 1,
       carryForwardTasks: carryForward,
-      avgTat: avgSupportHrs > 0 ? `${avgSupportHrs.toFixed(1)} hrs` : '1.4 hrs'
+      avgTat: avgSupportHrs > 0 ? `${avgSupportHrs.toFixed(1)} hrs` : '0 hrs'
     };
-  }, [rawData, supportInbox, baselineChecklists]);
+  }, [filteredData, supportInbox, baselineChecklists, filters]);
 
   // ----------------------------------------------------
   // 2. SHIFT & CARRY-FORWARD CALCULATIONS
@@ -301,7 +315,19 @@ const Dashboard = () => {
   // TAT PERFORMANCE CALCULATIONS (FASTEST/SLOWEST RESPONDERS)
   // ----------------------------------------------------
   const tatPerformance = useMemo(() => {
-    const resolvedItems = supportInbox.filter(s => s.status === 'Resolved' && s.resolvedAt && s.assignedTo);
+    const matchesFilter = (val, filterVal) => {
+      if (!filterVal || filterVal === 'ALL') return true;
+      return String(val || '').trim().toLowerCase() === String(filterVal).trim().toLowerCase();
+    };
+
+    const resolvedItems = supportInbox.filter(s => {
+      if (s.status !== 'Resolved' || !s.resolvedAt || !s.assignedTo) return false;
+      if (!matchesFilter(s.Type_of_Activity, filters.type)) return false;
+      if (!matchesFilter(s.Line_Equipment, filters.line)) return false;
+      if (!matchesFilter(s.Shift, filters.shift)) return false;
+      return true;
+    });
+    
     const userStats = {};
     
     resolvedItems.forEach(item => {
@@ -333,7 +359,7 @@ const Dashboard = () => {
       top: list.slice(0, 5),
       worst: list.slice(-5).reverse()
     };
-  }, [supportInbox]);
+  }, [supportInbox, filters]);
 
   const activityAndAudit = useMemo(() => {
     // Frequencies
@@ -428,7 +454,19 @@ const Dashboard = () => {
   // ----------------------------------------------------
   const exceptionAlerts = useMemo(() => {
     const stuckTasks = filteredData.filter(r => r.Status === 'WIP');
-    const untreatedSupport = supportInbox.filter(s => s.status === 'Open' || s.status === 'Pending');
+    
+    const matchesFilter = (val, filterVal) => {
+      if (!filterVal || filterVal === 'ALL') return true;
+      return String(val || '').trim().toLowerCase() === String(filterVal).trim().toLowerCase();
+    };
+
+    const untreatedSupport = supportInbox.filter(s => {
+      if (s.status !== 'Open' && s.status !== 'Pending') return false;
+      if (!matchesFilter(s.Type_of_Activity, filters.type)) return false;
+      if (!matchesFilter(s.Line_Equipment, filters.line)) return false;
+      if (!matchesFilter(s.Shift, filters.shift)) return false;
+      return true;
+    });
 
     // Failure prediction: components with compliance below 60%
     const comps = {};
@@ -448,29 +486,36 @@ const Dashboard = () => {
       untreatedSupportCount: untreatedSupport.length,
       delayProne
     };
-  }, [filteredData, supportInbox]);
+  }, [filteredData, supportInbox, filters]);
 
   // ----------------------------------------------------
   // 7. REVIEW PERFORMANCE CALCULATIONS
   // ----------------------------------------------------
   const reviewPerformanceStats = useMemo(() => {
-    const assignedReviewLines = [...new Set(reviewers.map(r => r.line_equipment))];
-    const reviewSubmissions = rawData.filter(sub => assignedReviewLines.includes(sub.Line_Equipment));
+    const assignedReviewLines = [...new Set(reviewers.map(r => r.line_equipment || r.activity_type))];
+    // Respect main filteredData to cascade layout filters into reviewer performance view!
+    const reviewSubmissions = filteredData.filter(sub => {
+      // Match either exact assigned review line or activity type
+      return assignedReviewLines.some(key => 
+        String(key || '').trim().toLowerCase() === String(sub.Line_Equipment || '').trim().toLowerCase() || 
+        String(key || '').trim().toLowerCase() === String(sub.Type_of_Activity || '').trim().toLowerCase()
+      );
+    });
     
     const totalSubmissionsForReview = reviewSubmissions.length;
-    const totalReviewed = reviewSubmissions.filter(sub => sub.Review_Status).length;
+    const totalReviewed = reviewSubmissions.filter(sub => sub.Review_Status && sub.Review_Status !== 'Pending').length;
     const totalPendingReview = totalSubmissionsForReview - totalReviewed;
     const overallReviewCompliance = totalSubmissionsForReview ? Math.round((totalReviewed / totalSubmissionsForReview) * 100) : 100;
 
     const reviewerMap = {};
     reviewSubmissions.forEach(sub => {
-      if (sub.Review_Status && sub.Reviewed_By) {
+      if (sub.Review_Status && sub.Review_Status !== 'Pending' && sub.Reviewed_By) {
         const rName = sub.Reviewed_By;
         if (!reviewerMap[rName]) {
           reviewerMap[rName] = { name: rName, total: 0, approved: 0, rejected: 0 };
         }
         reviewerMap[rName].total += 1;
-        if (sub.Review_Status === 'Approved') {
+        if (sub.Review_Status.includes('Approved')) {
           reviewerMap[rName].approved += 1;
         } else if (sub.Review_Status === 'Needs Correction') {
           reviewerMap[rName].rejected += 1;
@@ -481,9 +526,9 @@ const Dashboard = () => {
     const reviewerLeaderboard = Object.values(reviewerMap).sort((a, b) => b.total - a.total);
 
     const reviewStatusData = [
-      { name: 'Approved', value: reviewSubmissions.filter(s => s.Review_Status === 'Approved').length },
+      { name: 'Approved', value: reviewSubmissions.filter(s => String(s.Review_Status || '').includes('Approved')).length },
       { name: 'Needs Correction', value: reviewSubmissions.filter(s => s.Review_Status === 'Needs Correction').length },
-      { name: 'Pending', value: totalPendingReview }
+      { name: 'Pending', value: reviewSubmissions.filter(s => !s.Review_Status || s.Review_Status === 'Pending').length }
     ].filter(i => i.value > 0);
 
     const referenceDate = filters.dateEnd ? new Date(filters.dateEnd) : new Date();
@@ -496,7 +541,7 @@ const Dashboard = () => {
 
     const reviewTrend = dates.map(date => {
       const dayLogs = reviewSubmissions.filter(r => r.Date === date);
-      const reviewedCount = dayLogs.filter(r => r.Review_Status).length;
+      const reviewedCount = dayLogs.filter(r => r.Review_Status && r.Review_Status !== 'Pending').length;
       const pendingCount = dayLogs.length - reviewedCount;
       return { date, Reviewed: reviewedCount, Pending: pendingCount };
     });
@@ -510,7 +555,7 @@ const Dashboard = () => {
       reviewStatusData,
       reviewTrend
     };
-  }, [rawData, reviewers]);
+  }, [filteredData, reviewers, filters.dateEnd]);
 
   const resetFilters = () => {
     setFilters({ dateStart: '', dateEnd: '', type: 'ALL', line: 'ALL', subLine: 'ALL', frequency: 'ALL', userFilter: '', shift: 'ALL', docNo: 'ALL', revNo: 'ALL', month: 'ALL', year: 'ALL' });
@@ -571,7 +616,10 @@ const Dashboard = () => {
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>SHIFT</label>
               <select value={filters.shift} onChange={e => setFilters({...filters, shift: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
                 <option value="ALL">All Shifts</option>
-                {['A','B','C','G','General'].map(s => <option key={s} value={s}>Shift {s}</option>)}
+                {[...new Set([
+                  ...(shifts && shifts.length > 0 ? shifts.map(s => s.id) : ['A', 'B', 'C', 'G']),
+                  ...rawData.map(d => d.Shift)
+                ].filter(Boolean))].map(s => <option key={s} value={s}>Shift {s}</option>)}
               </select>
             </div>
 
@@ -599,7 +647,7 @@ const Dashboard = () => {
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>REVISION</label>
               <select value={filters.revNo} onChange={e => setFilters({...filters, revNo: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
                 <option value="ALL">All Revs</option>
-                {[...new Set([...rawData.map(d => d.Revision_Number), ...masterChecklists.map(d => d.Revision_Number)].filter(r => r && r !== '-'))].map(r => <option key={r} value={r}>{r}</option>)}
+                {[...new Set([...rawData.map(d => d.Revision), ...masterChecklists.map(d => d.Revision)].filter(r => r && r !== '-'))].map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
 
@@ -607,7 +655,7 @@ const Dashboard = () => {
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>ACTIVITY TYPE</label>
               <select value={filters.type} onChange={e => setFilters({...filters, type: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
                 <option value="ALL">All Types</option>
-                {[...new Set(rawData.map(d => d.Type_of_Activity).filter(Boolean))].map(t => <option key={t} value={t}>{t}</option>)}
+                {[...new Set([...rawData.map(d => d.Type_of_Activity), ...masterChecklists.map(c => c.Type_of_Activity)].filter(Boolean))].map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
 
@@ -615,7 +663,7 @@ const Dashboard = () => {
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>LINE / EQUIP</label>
               <select value={filters.line} onChange={e => setFilters({...filters, line: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
                 <option value="ALL">All Lines</option>
-                {[...new Set(rawData.map(d => d.Line_Equipment).filter(Boolean))].map(l => <option key={l} value={l}>{l}</option>)}
+                {[...new Set([...rawData.map(d => d.Line_Equipment), ...masterChecklists.map(c => c.Line_Equipment)].filter(Boolean))].map(l => <option key={l} value={l}>{l}</option>)}
               </select>
             </div>
 
@@ -630,7 +678,7 @@ const Dashboard = () => {
                 style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }} 
               />
               <datalist id="user-list">
-                {[...new Set(rawData.map(d => d.Submitted_By).filter(Boolean))].map(u => <option key={u} value={u} />)}
+                {[...new Set([...rawData.map(d => d.Submitted_By), ...employees.map(e => e.Employee_Name)].filter(Boolean))].map(u => <option key={u} value={u} />)}
               </datalist>
             </div>
           </div>

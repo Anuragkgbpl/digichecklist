@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
 
 const UploadEmployees = () => {
-  const { employees = [], shifts: cloudShifts = {}, checklists = [], updateFirebase } = useData();
+  const { employees = [], shifts: cloudShifts = [], checklists = [], updateFirebase } = useData();
   const [activeTab, setActiveTab] = useState('upload');
   const [file, setFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -32,18 +32,16 @@ const UploadEmployees = () => {
   }, [checklists]);
 
   // Use shifts from useData or defaults
-  const shiftMaster = useMemo(() => {
+  const shiftList = useMemo(() => {
     if (cloudShifts && cloudShifts.length > 0) {
-      const obj = {};
-      cloudShifts.forEach(s => { if(s.id) obj[s.id] = s; });
-      return obj;
+      return cloudShifts;
     }
-    return {
-      'A': { id: 'A', start: '06:00', end: '14:00' },
-      'B': { id: 'B', start: '14:00', end: '22:00' },
-      'C': { id: 'C', start: '22:00', end: '06:00' },
-      'G': { id: 'G', start: '09:00', end: '18:00' }
-    };
+    return [
+      { id: 'A', start: '06:00', end: '14:00' },
+      { id: 'B', start: '14:00', end: '22:00' },
+      { id: 'C', start: '22:00', end: '06:00' },
+      { id: 'G', start: '09:00', end: '18:00' }
+    ];
   }, [cloudShifts]);
 
   const processFile = (selectedFile) => {
@@ -163,15 +161,15 @@ const UploadEmployees = () => {
     setShowPasswords(prev => ({ ...prev, [empId]: !prev[empId] }));
   };
 
-  const handleUpdateShiftTiming = async (id, field, value) => {
-    const currentShifts = shifts.length > 0 ? shifts : [
+  const handleUpdateShiftTiming = async (index, field, value) => {
+    const currentShifts = cloudShifts && cloudShifts.length > 0 ? [...cloudShifts] : [
       { id: 'A', start: '06:00', end: '14:00' },
       { id: 'B', start: '14:00', end: '22:00' },
       { id: 'C', start: '22:00', end: '06:00' },
       { id: 'G', start: '09:00', end: '18:00' }
     ];
-    const updated = currentShifts.map(s => s.id === id ? { ...s, [field]: value } : s);
-    await updateFirebase('shifts', updated);
+    currentShifts[index] = { ...currentShifts[index], [field]: value };
+    await updateFirebase('shifts', currentShifts);
   };
 
   const handleDeleteAll = async () => {
@@ -347,25 +345,33 @@ const UploadEmployees = () => {
           <div style={{ marginBottom: '2rem' }}>
             <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Settings size={18} /> Configure Shift Master Timings</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-              {Object.keys(shiftMaster).map(s => (
-                <div key={s} style={{ padding: '1.5rem', backgroundColor: '#F8FAFC', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+              {shiftList.map((s, idx) => (
+                <div key={idx} style={{ padding: '1.5rem', backgroundColor: '#F8FAFC', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                   <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--primary-dark)', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    Shift {s} <Clock size={18} />
+                    Shift {s.id} <Clock size={18} />
                   </div>
                   <div style={{ display: 'grid', gap: '0.75rem' }}>
                     <div>
+                      <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase' }}>Shift Name / Code</label>
+                      <input 
+                        type="text" value={s.id} 
+                        onChange={e => handleUpdateShiftTiming(idx, 'id', e.target.value)}
+                        style={{ width: '100%', padding: '0.5rem', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 700 }}
+                      />
+                    </div>
+                    <div>
                       <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase' }}>Start Time</label>
                       <input 
-                        type="time" value={shiftMaster[s].start} 
-                        onChange={e => handleUpdateShiftTiming(s, 'start', e.target.value)}
+                        type="time" value={s.start} 
+                        onChange={e => handleUpdateShiftTiming(idx, 'start', e.target.value)}
                         style={{ width: '100%', padding: '0.5rem', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.9rem' }}
                       />
                     </div>
                     <div>
                       <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase' }}>End Time</label>
                       <input 
-                        type="time" value={shiftMaster[s].end} 
-                        onChange={e => handleUpdateShiftTiming(s, 'end', e.target.value)}
+                        type="time" value={s.end} 
+                        onChange={e => handleUpdateShiftTiming(idx, 'end', e.target.value)}
                         style={{ width: '100%', padding: '0.5rem', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.9rem' }}
                       />
                     </div>
@@ -470,10 +476,9 @@ const UploadEmployees = () => {
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.4rem' }}>Initial Shift</label>
                 <select value={newEmployee.Shift} onChange={e => setNewEmployee({...newEmployee, Shift: e.target.value})} style={{ width: '100%', padding: '0.6rem', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
                   <option value="">No Shift</option>
-                  <option value="A">Shift A</option>
-                  <option value="B">Shift B</option>
-                  <option value="C">Shift C</option>
-                  <option value="G">Shift G</option>
+                  {shiftList.map(s => (
+                    <option key={s.id} value={s.id}>Shift {s.id}</option>
+                  ))}
                 </select>
               </div>
 

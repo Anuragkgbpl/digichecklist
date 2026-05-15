@@ -56,18 +56,26 @@ const SupportInbox = () => {
     const L3 = [];
     const originalLines = [];
     reviewers.forEach(r => {
-      if (!r.line_equipment) return;
+      const at = String(r.activity_type || '').trim();
+      const le = String(r.line_equipment || '').trim();
+      if (!le) return;
+      
       const hasL1 = (r.reviewerIdsL1 || r.reviewerIds || []).includes(user.id);
       const hasL2 = (r.reviewerIdsL2 || []).includes(user.id);
       const hasL3 = (r.reviewerIdsL3 || []).includes(user.id);
       
       if (hasL1 || hasL2 || hasL3) {
-        originalLines.push(r.line_equipment);
+        originalLines.push(at ? `${at} - ${le}` : le);
       }
-      const cleanLine = String(r.line_equipment).trim().toLowerCase();
-      if (hasL1) L1.push(cleanLine);
-      if (hasL2) L2.push(cleanLine);
-      if (hasL3) L3.push(cleanLine);
+      
+      // Composite key "activity|line" or just "line" (legacy)
+      const compoundKey = at 
+        ? `${at.toLowerCase()}|${le.toLowerCase()}`
+        : le.toLowerCase();
+
+      if (hasL1) L1.push(compoundKey);
+      if (hasL2) L2.push(compoundKey);
+      if (hasL3) L3.push(compoundKey);
     });
     return { L1, L2, L3, originalLines: [...new Set(originalLines)] };
   }, [reviewers, user]);
@@ -75,15 +83,26 @@ const SupportInbox = () => {
   const reviewerLines = reviewerRoles.originalLines;
   const isReviewer = reviewerLines.length > 0;
 
+  // Centralized Helper to check authorization (supports granular combo + legacy line-only fallback)
+  const isUserAuthorizedForSubmission = (sub, levelArray) => {
+    if (!levelArray || levelArray.length === 0) return false;
+    const at = String(sub.Type_of_Activity || '').trim().toLowerCase();
+    const le = String(sub.Line_Equipment || '').trim().toLowerCase();
+    // 1. Match granular combo
+    if (at && levelArray.includes(`${at}|${le}`)) return true;
+    // 2. Match legacy line-only global
+    if (levelArray.includes(le)) return true;
+    return false;
+  };
+
   // Centralized logic to determine if a submission belongs in the user's review workflow queue
   const isVisibleInReviewInbox = (sub) => {
-    const cleanLine = String(sub.Line_Equipment || '').trim().toLowerCase();
     const currentStatus = sub.Review_Status || 'Pending';
 
     // 1. Security clearance
-    const isL1 = reviewerRoles.L1.includes(cleanLine);
-    const isL2 = reviewerRoles.L2.includes(cleanLine);
-    const isL3 = reviewerRoles.L3.includes(cleanLine);
+    const isL1 = isUserAuthorizedForSubmission(sub, reviewerRoles.L1);
+    const isL2 = isUserAuthorizedForSubmission(sub, reviewerRoles.L2);
+    const isL3 = isUserAuthorizedForSubmission(sub, reviewerRoles.L3);
     if (!isL1 && !isL2 && !isL3) return false;
 
     // 2. Workflow level-alignment (Action required at my active level)
@@ -150,16 +169,18 @@ const SupportInbox = () => {
   const computeNextReviewStatus = (sub, requestedStatus) => {
     if (requestedStatus !== 'Approved') return requestedStatus; // e.g. 'Needs Correction'
     
-    const cleanLine = String(sub.Line_Equipment || '').trim().toLowerCase();
     const currentStatus = sub.Review_Status || 'Pending';
+    const isL1 = isUserAuthorizedForSubmission(sub, reviewerRoles.L1);
+    const isL2 = isUserAuthorizedForSubmission(sub, reviewerRoles.L2);
+    const isL3 = isUserAuthorizedForSubmission(sub, reviewerRoles.L3);
     
-    if (currentStatus === 'Pending' && reviewerRoles.L1.includes(cleanLine)) {
+    if (currentStatus === 'Pending' && isL1) {
       return 'L1 Approved';
     }
-    if (currentStatus === 'L1 Approved' && reviewerRoles.L2.includes(cleanLine)) {
+    if (currentStatus === 'L1 Approved' && isL2) {
       return 'L2 Approved';
     }
-    if (currentStatus === 'L2 Approved' && reviewerRoles.L3.includes(cleanLine)) {
+    if (currentStatus === 'L2 Approved' && isL3) {
       return 'Approved';
     }
     
@@ -239,11 +260,10 @@ const SupportInbox = () => {
     let validKeysCount = 0;
 
     items.forEach(item => {
-      const cleanLine = String(item.Line_Equipment || '').trim().toLowerCase();
       const currentStatus = item.Review_Status || 'Pending';
-      const isL1 = reviewerRoles.L1.includes(cleanLine);
-      const isL2 = reviewerRoles.L2.includes(cleanLine);
-      const isL3 = reviewerRoles.L3.includes(cleanLine);
+      const isL1 = isUserAuthorizedForSubmission(item, reviewerRoles.L1);
+      const isL2 = isUserAuthorizedForSubmission(item, reviewerRoles.L2);
+      const isL3 = isUserAuthorizedForSubmission(item, reviewerRoles.L3);
       
       let isPendingAtMyLevel = false;
       if (isL1 && currentStatus === 'Pending') isPendingAtMyLevel = true;
@@ -310,7 +330,15 @@ const SupportInbox = () => {
         if (String(sub.Type_of_Activity || '').trim().toLowerCase() !== String(revTypeFilter).trim().toLowerCase()) return false;
       }
       if (revLineFilter !== 'all') {
-        if (String(sub.Line_Equipment || '').trim().toLowerCase() !== String(revLineFilter).trim().toLowerCase()) return false;
+        const at = String(sub.Type_of_Activity || '').trim().toLowerCase();
+        const le = String(sub.Line_Equipment || '').trim().toLowerCase();
+        const val = String(revLineFilter).trim().toLowerCase();
+        if (val.includes(' - ')) {
+          const combo = `${at} - ${le}`;
+          if (combo !== val) return false;
+        } else {
+          if (le !== val && at !== val) return false;
+        }
       }
       return true;
     }).reverse();
@@ -330,20 +358,28 @@ const SupportInbox = () => {
         if (String(sub.Type_of_Activity || '').trim().toLowerCase() !== String(revTypeFilter).trim().toLowerCase()) return false;
       }
       if (revLineFilter !== 'all') {
-        if (String(sub.Line_Equipment || '').trim().toLowerCase() !== String(revLineFilter).trim().toLowerCase()) return false;
+        const at = String(sub.Type_of_Activity || '').trim().toLowerCase();
+        const le = String(sub.Line_Equipment || '').trim().toLowerCase();
+        const val = String(revLineFilter).trim().toLowerCase();
+        if (val.includes(' - ')) {
+          const combo = `${at} - ${le}`;
+          if (combo !== val) return false;
+        } else {
+          if (le !== val && at !== val) return false;
+        }
       }
       return true;
     });
 
     const groups = {};
     baseData.forEach(sub => {
-      const key = `${sub.Date}_${sub.Shift || 'Gen'}_${sub.Line_Equipment}_${sub.Frequency || 'Daily'}`;
+      const key = `${sub.Date}_${sub.Shift || 'Gen'}_${sub.Type_of_Activity}_${sub.Line_Equipment}_${sub.Frequency || 'Daily'}`;
       if (!groups[key]) {
         groups[key] = {
           key,
           date: sub.Date,
           shift: sub.Shift || 'Gen',
-          line: sub.Line_Equipment,
+          line: sub.Type_of_Activity ? `${sub.Type_of_Activity} - ${sub.Line_Equipment}` : sub.Line_Equipment,
           frequency: sub.Frequency || 'Daily',
           items: [],
           users: new Set()
@@ -356,11 +392,10 @@ const SupportInbox = () => {
     return Object.values(groups).map(g => {
       // Dynamically calculate what is truly 'Pending' at this specific user's level!
       const pendingCount = g.items.filter(i => {
-        const cleanLine = String(i.Line_Equipment || '').trim().toLowerCase();
         const currentStatus = i.Review_Status || 'Pending';
-        const isL1 = reviewerRoles.L1.includes(cleanLine);
-        const isL2 = reviewerRoles.L2.includes(cleanLine);
-        const isL3 = reviewerRoles.L3.includes(cleanLine);
+        const isL1 = isUserAuthorizedForSubmission(i, reviewerRoles.L1);
+        const isL2 = isUserAuthorizedForSubmission(i, reviewerRoles.L2);
+        const isL3 = isUserAuthorizedForSubmission(i, reviewerRoles.L3);
         
         if (isL1 && currentStatus === 'Pending') return true;
         if (isL2 && currentStatus === 'L1 Approved') return true;
@@ -987,14 +1022,14 @@ const SupportInbox = () => {
           
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', alignItems: 'end' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>LINE / EQUIPMENT</label>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 750, color: '#64748B', marginBottom: '0.35rem', letterSpacing: '0.025em' }}>MY ASSIGNED SCOPE</label>
               <select 
                 value={revLineFilter} 
                 onChange={e => setRevLineFilter(e.target.value)} 
                 className="select-input" 
                 style={{ padding: '0.45rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
               >
-                <option value="all">All My Assigned Lines</option>
+                <option value="all">All My Assignments</option>
                 {reviewerLines.map(line => <option key={line} value={line}>{line}</option>)}
               </select>
             </div>
