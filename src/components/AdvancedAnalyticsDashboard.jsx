@@ -78,11 +78,11 @@ const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions, filte
 
   return (
     <div className="card" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>
           {Icon && <Icon size={16} color="#6366F1" />} {title}
         </div>
-        <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' }}>
           {filterKey && subFilterOptions.length > 0 && (
             <select 
               value={activeSubFilter} 
@@ -391,7 +391,7 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
           <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>LEVEL 1: Executive Command Scorecard</h2>
         </div>
         
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '1.5rem' }}>
           <div className="card" style={{ background: 'white', border: '1px solid #E2E8F0', padding: '1.5rem' }}>
             <span style={subTitleStyle}>Best Performing Shift</span>
             <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1E293B' }}>Shift {globalKPI.bestShift}</div>
@@ -631,7 +631,7 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
           <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>LEVEL 2: Operational Control & Audits</h2>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '1.5rem' }}>
           {/* Frequency Compliance */}
           <div className="card">
             <div style={cardHeaderStyle}><Calendar size={18} color="#3B82F6" /> Frequency Compliance (Target vs Result)</div>
@@ -655,16 +655,18 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
           {/* Overdue Aging Pie */}
           <div className="card">
             <div style={cardHeaderStyle}><Clock size={18} color="#F59E0B" /> Overdue Aging Breakdown</div>
-            <div style={{ height: '250px', display: 'flex' }}>
-              <ResponsiveContainer width="60%" height="100%">
-                <PieChart>
-                  <Pie data={overdueAging} innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value">
-                    {overdueAging.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '1rem', flex: 1 }}>
+            <div style={{ height: isMobile ? 'auto' : '250px', display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: 'center' }}>
+              <div style={{ width: isMobile ? '100%' : '60%', height: '250px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={overdueAging} innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value">
+                      {overdueAging.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ display: 'flex', flexDirection: isMobile ? 'row' : 'column', justifyContent: 'center', flexWrap: 'wrap', gap: '1rem', flex: 1, paddingBottom: isMobile ? '1rem' : 0 }}>
                 {overdueAging.map(x => (
                   <div key={x.name} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: x.fill }} />
@@ -719,7 +721,7 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
           <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>LEVEL 3: Execution Depth & Anomaly Tracking</h2>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '1.5rem' }}>
           
           {/* Peak Submission Heatmap */}
           <div className="card" style={{ gridColumn: 'span 1' }}>
@@ -769,7 +771,7 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
           <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>LEVEL 4: Multi-Dimension Completion Performance (7-Day Trend)</h2>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '1.5rem' }}>
           <DynamicDimensionTrend title="Daily Trend: Type of Activity" pivotKey="Type_of_Activity" icon={Activity} submissions={submissions} filterKey="Line_Equipment" filterLabel="Line" />
           <DynamicDimensionTrend title="Daily Trend: Line Equipment" pivotKey="Line_Equipment" icon={Layers} submissions={submissions} filterKey="Type_of_Activity" filterLabel="Act. Type" />
           <DynamicDimensionTrend title="Daily Trend: Sub-Line Equipment" pivotKey="Sub_Line_Equipment" icon={Map} submissions={submissions} filterKey="Line_Equipment" filterLabel="Line" />
