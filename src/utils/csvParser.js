@@ -125,9 +125,16 @@ export const validateChecklist = (data) => {
     const rowNum = index + 2;
     const rowErrors = [];
     
-    requiredColumns.forEach(col => {
-      if (!row[col]) rowErrors.push(`Missing required field: ${col}`);
-    });
+    if (row.Type_of_Activity === 'Fire Safety') {
+      const fsRequired = ['Type_of_Activity', 'Line_Equipment', 'Sub_Line_Equipment', 'Area_Zone', 'Equipment_Category', 'Asset_ID', 'Component', 'Activity_Description', 'Standard', 'Frequency'];
+      fsRequired.forEach(col => {
+        if (!row[col]) rowErrors.push(`Missing required field for Fire Safety: ${col}`);
+      });
+    } else {
+      requiredColumns.forEach(col => {
+        if (!row[col]) rowErrors.push(`Missing required field: ${col}`);
+      });
+    }
 
     if (rowErrors.length > 0) {
       errors.push({ row: rowNum, messages: rowErrors });

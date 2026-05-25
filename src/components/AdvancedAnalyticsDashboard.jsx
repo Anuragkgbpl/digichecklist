@@ -132,7 +132,7 @@ const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions, filte
   );
 };
 
-const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] }) => {
+const AdvancedAnalyticsDashboard = ({ preFilteredData, baseChecklists }) => {
   const { submissions: rawAllSub = [], checklists: rawAllCheck = [], shifts = [] } = useData();
   const [trendPivot, setTrendPivot] = useState('shift');
 
@@ -144,8 +144,8 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData = [], baseChecklists = [] 
   }, []);
   
   // Use props passed from filtered parent dashboard, fallback safely
-  const submissions = preFilteredData.length > 0 ? preFilteredData : rawAllSub;
-  const checklists = baseChecklists.length > 0 ? baseChecklists : rawAllCheck;
+  const submissions = preFilteredData !== undefined ? preFilteredData : rawAllSub;
+  const checklists = baseChecklists !== undefined ? baseChecklists : rawAllCheck;
 
   const shiftMaster = useMemo(() => {
     const obj = {};

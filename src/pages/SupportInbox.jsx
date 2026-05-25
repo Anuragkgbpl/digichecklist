@@ -429,10 +429,31 @@ const SupportInbox = () => {
     return { bg: '#FFFBEB', fg: '#D97706' };
   };
 
+  // Helper: get the user's allowed activity types as a lowercase array (null if unrestricted)
+  const userAllowedActivities = useMemo(() => {
+    if (isAdmin) return null; // Admins see everything
+    const allowed = user?.allowedActivity;
+    if (!allowed) return null;
+    if (typeof allowed === 'string') {
+      if (allowed === 'ALL') return null;
+      return [allowed.trim().toLowerCase()];
+    }
+    if (Array.isArray(allowed)) {
+      if (allowed.includes('ALL')) return null;
+      return allowed.map(a => String(a).trim().toLowerCase());
+    }
+    return null;
+  }, [isAdmin, user]);
+
   const filteredSubmissions = useMemo(() => {
     if (activeTab !== 'submission_logs') return [];
     
     return submissions.filter(sub => {
+      // Restrict by user's allowed activity type
+      if (userAllowedActivities) {
+        const subActivity = String(sub.Type_of_Activity || '').trim().toLowerCase();
+        if (!userAllowedActivities.includes(subActivity)) return false;
+      }
       // Description filter
       if (logDescFilter) {
         const q = logDescFilter.toLowerCase();
@@ -501,7 +522,7 @@ const SupportInbox = () => {
       
       return true;
     }).reverse();
-  }, [submissions, activeTab, logStartDate, logEndDate, logShiftFilter, logDocFilter, logSubmittedByFilter, logDescFilter, logActivityTypeFilter, logLineFilter, logSubLineFilter, logComponentFilter, logRevFilter, logFreqFilter, logStatusFilter]);
+  }, [submissions, activeTab, logStartDate, logEndDate, logShiftFilter, logDocFilter, logSubmittedByFilter, logDescFilter, logActivityTypeFilter, logLineFilter, logSubLineFilter, logComponentFilter, logRevFilter, logFreqFilter, logStatusFilter, userAllowedActivities]);
 
   const getDuration = (start, end) => {
     if (!start) return '-';
@@ -521,6 +542,14 @@ const SupportInbox = () => {
 
   const inbox = useMemo(() => {
     let list = supportInbox;
+
+    // 0. Restrict non-admin users to their allowed activity type
+    if (userAllowedActivities) {
+      list = list.filter(req => {
+        const reqActivity = String(req.activity || '').trim().toLowerCase();
+        return userAllowedActivities.includes(reqActivity);
+      });
+    }
     
     // 1. Tab-based base list
     if (activeTab === 'all' && isAdmin) {
@@ -558,7 +587,7 @@ const SupportInbox = () => {
     }
     
     return list;
-  }, [supportInbox, activeTab, isAdmin, user, adminDurationFilter, dateFilter, nameFilter, statusFilter]);
+  }, [supportInbox, activeTab, isAdmin, user, adminDurationFilter, dateFilter, nameFilter, statusFilter, userAllowedActivities]);
 
   // Map Support Inbox status onto the main Checklist status fields
   const mapSupportToChecklistStatus = (supportStatus) => {

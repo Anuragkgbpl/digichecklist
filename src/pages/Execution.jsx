@@ -10,9 +10,9 @@ import { validateChecklistTiming, getCurrentShift, getCurrentDailyCycleRange, ge
 const ProgressBar = ({ items, statusUpdates }) => {
   const total = items.length;
   if (total === 0) return null;
-  const done = Object.values(statusUpdates).filter(s => s === 'Done').length;
+  const done = Object.values(statusUpdates).filter(s => s === 'Done' || s === 'OK').length;
   const wip = Object.values(statusUpdates).filter(s => s === 'WIP').length;
-  const support = Object.values(statusUpdates).filter(s => s === 'Support Required').length;
+  const support = Object.values(statusUpdates).filter(s => s === 'Support Required' || s === 'Not OK').length;
   const hold = Object.values(statusUpdates).filter(s => s === 'Hold' || s === 'Postponed').length;
   const pct = (n) => `${Math.round((n / total) * 100)}%`;
 
@@ -126,6 +126,9 @@ const Execution = () => {
   const urlActivityType = queryParams.get('activityType');
   const urlLine = queryParams.get('line');
   const urlSubLine = queryParams.get('subLine');
+  const urlArea = queryParams.get('area');
+  const urlCategory = queryParams.get('category');
+  const urlAssetId = queryParams.get('assetId');
   const urlComponent = queryParams.get('component');
   const urlFrequency = queryParams.get('frequency');
 
@@ -237,6 +240,15 @@ const Execution = () => {
     if (urlSubLine) {
       accessible = accessible.filter(c => String(c.Sub_Line_Equipment || '').trim().toLowerCase() === String(urlSubLine).trim().toLowerCase());
     }
+    if (urlArea) {
+      accessible = accessible.filter(c => String(c.Area_Zone || c.Area || '').trim().toLowerCase() === String(urlArea).trim().toLowerCase());
+    }
+    if (urlCategory) {
+      accessible = accessible.filter(c => String(c.Equipment_Category || '').trim().toLowerCase() === String(urlCategory).trim().toLowerCase());
+    }
+    if (urlAssetId) {
+      accessible = accessible.filter(c => String(c.Asset_ID || '').trim().toLowerCase() === String(urlAssetId).trim().toLowerCase());
+    }
 
     // 4. Strict Deduplication (Frequency Integrity)
     // Ensure each unique activity (Type+Line+SubLine+Component+Description) only appears ONCE
@@ -289,7 +301,7 @@ const Execution = () => {
           String(sub.Activity_Description || '').trim().toLowerCase() === String(chk.Activity_Description || '').trim().toLowerCase();
 
         if (!matchesKey) return false;
-        if (sub.Status !== 'Done') return false;
+        if (sub.Status !== 'Done' && sub.Status !== 'OK') return false;
 
         const subTime = sub.Date_Timestamp ? new Date(sub.Date_Timestamp) : new Date(sub.Date || Date.now());
         
@@ -317,15 +329,20 @@ const Execution = () => {
       
       if (urlFrequency && availableFreqs.includes(urlFrequency)) {
         setSelectedFrequency(urlFrequency);
-      } else if (availableFreqs.length > 0 && !availableFreqs.includes(selectedFrequency)) {
+      } else if (selectedFrequency !== 'ALL' && availableFreqs.length > 0 && !availableFreqs.includes(selectedFrequency)) {
         if (availableFreqs.includes('Shift') && activeShiftNow) {
           setSelectedFrequency('Shift');
         } else {
           setSelectedFrequency(availableFreqs[0]);
         }
+      } else if (selectedFrequency === 'ALL' && !urlFrequency) {
+         // Keep 'ALL' if it was selected or default, but if there's only 1 frequency, auto-select it
+         if (availableFreqs.length === 1) {
+           setSelectedFrequency(availableFreqs[0]);
+         }
       }
     }
-  }, [user, scanLevel, scanName, urlActivityType, urlLine, urlSubLine, urlComponent, urlFrequency, isAllActivities, cloudChecklists, dataLoading, cloudSubmissions, shiftMaster]);
+  }, [user, scanLevel, scanName, urlActivityType, urlLine, urlSubLine, urlArea, urlCategory, urlAssetId, urlComponent, urlFrequency, isAllActivities, cloudChecklists, dataLoading, cloudSubmissions, shiftMaster]);
 
   // Validate timing for selected frequency
   const timingValidation = useMemo(() => {
@@ -412,6 +429,10 @@ const Execution = () => {
           Type_of_Activity: c.Type_of_Activity,
           Line_Equipment: c.Line_Equipment,
           Sub_Line_Equipment: c.Sub_Line_Equipment,
+          Area_Zone: c.Area_Zone || c.Area || '',
+          Equipment_Category: c.Equipment_Category || '',
+          Asset_ID: c.Asset_ID || '',
+          Standard: c.Standard || '',
           Component: c.Component,
           Activity_Description: c.Activity_Description,
           Frequency: c.Frequency,
@@ -430,12 +451,16 @@ const Execution = () => {
         };
       });
 
-      const supportItems = filteredChecklists.filter(c => statusUpdates[c.id] === 'Support Required');
+      const supportItems = filteredChecklists.filter(c => statusUpdates[c.id] === 'Support Required' || statusUpdates[c.id] === 'Not OK');
       const newSupport = supportItems.map(c => ({
         id: `support-${Date.now()}-${c.id}`,
         status: 'Open',
         submissionId: submissionIdMap[c.id] || null,
         location: c.Line_Equipment || c.Sub_Line_Equipment || 'Unknown',
+        Area_Zone: c.Area_Zone || c.Area || '',
+        Equipment_Category: c.Equipment_Category || '',
+        Asset_ID: c.Asset_ID || '',
+        Standard: c.Standard || '',
         activity: c.Type_of_Activity,
         taskId: c.id,
         component: c.Component,
@@ -476,9 +501,9 @@ const Execution = () => {
     }
   };
 
-  const getStatusColor = (s) => ({ 'Pending': '#94A3B8', 'Done': '#10B981', 'WIP': '#F59E0B', 'Hold': '#64748B', 'Postponed': '#8B5CF6', 'Support Required': '#EF4444' }[s] || '#94A3B8');
+  const getStatusColor = (s) => ({ 'Pending': '#94A3B8', 'Done': '#10B981', 'WIP': '#F59E0B', 'Hold': '#64748B', 'Postponed': '#8B5CF6', 'Support Required': '#EF4444', 'OK': '#10B981', 'Not OK': '#EF4444' }[s] || '#94A3B8');
 
-  const supportCount = Object.values(statusUpdates).filter(s => s === 'Support Required').length;
+  const supportCount = Object.values(statusUpdates).filter(s => s === 'Support Required' || s === 'Not OK').length;
 
   useEffect(() => {
     if (!scanLevel || !scanName) return;
@@ -527,19 +552,40 @@ const Execution = () => {
         </div>
       )}
 
-      {urlLine && (
-        <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 'var(--border-radius-md)', padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#166534' }}>
-              📍 {urlLine} {urlSubLine && `> ${urlSubLine}`} {urlComponent && `> ${urlComponent}`}
-            </span>
-            <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} onClick={() => navigate('/user/execute')}>Clear Selection</button>
+      {urlLine && (() => {
+        const isFS = urlActivityType?.trim().toLowerCase() === 'fire safety';
+        return (
+          <div style={{
+            backgroundColor: isFS ? '#FEF2F2' : '#F0FDF4',
+            border: `1px solid ${isFS ? '#FCA5A5' : '#86EFAC'}`,
+            borderRadius: 'var(--border-radius-md)',
+            padding: '0.75rem 1rem',
+            marginBottom: '1rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.25rem'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.875rem', fontWeight: 600, color: isFS ? '#991B1B' : '#166534' }}>
+                📍 {urlLine} 
+                {urlSubLine && ` > ${urlSubLine}`} 
+                {isFS && urlArea && ` > ${urlArea}`} 
+                {isFS && urlCategory && ` > ${urlCategory}`} 
+                {isFS && urlAssetId && ` > ${urlAssetId}`} 
+                {urlComponent && ` > ${urlComponent}`}
+              </span>
+              <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} onClick={() => {
+                const params = new URLSearchParams();
+                if (urlActivityType) params.set('activityType', urlActivityType);
+                navigate(`/user/scan-select?${params.toString()}`);
+              }}>Clear Selection</button>
+            </div>
+            <div style={{ fontSize: '0.75rem', color: isFS ? '#B91C1C' : '#15803d' }}>
+              Frequency: <strong>{selectedFrequency}</strong>
+            </div>
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#15803d' }}>
-            Frequency: <strong>{selectedFrequency}</strong>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {scanLevel && !urlLine && (
         <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 'var(--border-radius-md)', padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -610,8 +656,9 @@ const Execution = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {filteredChecklists.map((chk, idx) => {
               const status = statusUpdates[chk.id] || 'Pending';
-              const isSupport = status === 'Support Required';
+              const isSupport = status === 'Support Required' || status === 'Not OK';
               const sColor = getStatusColor(status);
+              const isFS = String(chk.Type_of_Activity || '').toLowerCase() === 'fire safety';
               return (
                 <div 
                   key={chk.id} 
@@ -630,7 +677,7 @@ const Execution = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-tertiary)' }}>TASK #{idx + 1}</span>
                     <div style={{ display: 'flex', gap: '0.3rem' }}>
-                      <span style={{ fontSize: '0.65rem', fontWeight: 600, backgroundColor: '#F1F5F9', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>{chk.Type_of_Activity}</span>
+                      <span style={{ fontSize: '0.65rem', fontWeight: 600, backgroundColor: isFS ? '#FEE2E2' : '#F1F5F9', color: isFS ? '#991B1B' : 'inherit', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>{chk.Type_of_Activity}</span>
                       <span style={{ fontSize: '0.65rem', fontWeight: 700, backgroundColor: '#FEF3C7', color: '#92400E', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>{chk.Frequency}</span>
                     </div>
                   </div>
@@ -638,12 +685,21 @@ const Execution = () => {
                   {/* Component & Description */}
                   <div>
                     <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--primary-dark)' }}>{chk.Activity_Description}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem', fontWeight: 600 }}>Component: {chk.Component}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem', fontWeight: 600 }}>
+                      Component: {chk.Component} {chk.Standard && ` | Standard: ${chk.Standard}`}
+                    </div>
                   </div>
 
                   {/* Location info */}
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', backgroundColor: '#F8FAFC', padding: '0.4rem 0.6rem', borderRadius: '6px' }}>
                     <strong>📍 Location:</strong> {chk.Line_Equipment} {chk.Sub_Line_Equipment && `• ${chk.Sub_Line_Equipment}`}
+                    {isFS && (
+                      <>
+                        {chk.Area_Zone && ` • ${chk.Area_Zone}`}
+                        {chk.Equipment_Category && ` • ${chk.Equipment_Category}`}
+                        {chk.Asset_ID && ` • ${chk.Asset_ID}`}
+                      </>
+                    )}
                   </div>
 
                   {/* Status Dropdown */}
@@ -654,11 +710,21 @@ const Execution = () => {
                       onChange={e => setStatusUpdates(p => ({ ...p, [chk.id]: e.target.value }))} 
                       style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: `1.5px solid ${sColor}`, backgroundColor: `${sColor}15`, color: sColor, fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}
                     >
-                      <option value="Pending">Pending</option>
-                      <option value="Done">Done</option>
-                      <option value="WIP">In Progress</option>
-                      <option value="Hold">Hold</option>
-                      <option value="Support Required">Support Required</option>
+                      {isFS ? (
+                        <>
+                          <option value="Pending">Pending</option>
+                          <option value="OK">OK</option>
+                          <option value="Not OK">Not OK</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="Pending">Pending</option>
+                          <option value="Done">Done</option>
+                          <option value="WIP">In Progress</option>
+                          <option value="Hold">Hold</option>
+                          <option value="Support Required">Support Required</option>
+                        </>
+                      )}
                     </select>
                   </div>
 
@@ -743,33 +809,55 @@ const Execution = () => {
               <tbody>
                 {filteredChecklists.map((chk, idx) => {
                   const status = statusUpdates[chk.id] || 'Pending';
-                  const isSupport = status === 'Support Required';
+                  const isSupport = status === 'Support Required' || status === 'Not OK';
                   const sColor = getStatusColor(status);
+                  const isFS = String(chk.Type_of_Activity || '').toLowerCase() === 'fire safety';
                   return (
                     <React.Fragment key={chk.id}>
                       <tr style={{ borderBottom: isSupport ? 'none' : '1px solid var(--border-color)', backgroundColor: isSupport ? '#FFF5F5' : 'transparent' }}>
                         <td style={{ padding: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>{idx + 1}</td>
                         <td style={{ padding: '0.75rem' }}>
                           <div style={{ fontWeight: 800, color: 'var(--primary-dark)' }}>{chk.Activity_Description}</div>
-                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.15rem', fontWeight: 600 }}>Component: {chk.Component}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.15rem', fontWeight: 600 }}>
+                            Component: {chk.Component} {chk.Standard && ` | Standard: ${chk.Standard}`}
+                          </div>
                         </td>
                         <td style={{ padding: '0.75rem' }}>
                           <div>{chk.Line_Equipment}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{chk.Sub_Line_Equipment}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                            {chk.Sub_Line_Equipment}
+                            {isFS && (
+                              <>
+                                {chk.Area_Zone && ` > ${chk.Area_Zone}`}
+                                {chk.Equipment_Category && ` > ${chk.Equipment_Category}`}
+                                {chk.Asset_ID && ` > ${chk.Asset_ID}`}
+                              </>
+                            )}
+                          </div>
                         </td>
                         <td style={{ padding: '0.75rem' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 600, backgroundColor: '#F1F5F9', padding: '0.2rem 0.5rem', borderRadius: '4px', width: 'fit-content' }}>{chk.Type_of_Activity}</span>
-                            <span style={{ fontSize: '0.65rem', fontWeight: 700, backgroundColor: '#FEF3C7', color: '#92400E', padding: '0.1rem 0.4rem', borderRadius: '4px', width: 'fit-content' }}>{chk.Frequency}</span>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 600, backgroundColor: isFS ? '#FEE2E2' : '#F1F5F9', color: isFS ? '#991B1B' : 'inherit', padding: '0.2rem 0.5rem', borderRadius: '4px', width: 'fit-content' }}>{chk.Type_of_Activity}</span>
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, backgroundColor: '#FEF3C7', color: '#92400E', padding: '0.15rem 0.4rem', borderRadius: '4px', width: 'fit-content' }}>{chk.Frequency}</span>
                           </div>
                         </td>
                         <td style={{ padding: '0.75rem' }}>
                           <select value={status} onChange={e => setStatusUpdates(p => ({ ...p, [chk.id]: e.target.value }))} style={{ width: '100%', padding: '0.45rem 0.5rem', borderRadius: '6px', border: `1.5px solid ${sColor}`, backgroundColor: `${sColor}15`, color: sColor, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}>
-                            <option value="Pending">Pending</option>
-                            <option value="Done">Done</option>
-                            <option value="WIP">In Progress</option>
-                            <option value="Hold">Hold</option>
-                            <option value="Support Required">Support Required</option>
+                            {isFS ? (
+                              <>
+                                <option value="Pending">Pending</option>
+                                <option value="OK">OK</option>
+                                <option value="Not OK">Not OK</option>
+                              </>
+                            ) : (
+                              <>
+                                <option value="Pending">Pending</option>
+                                <option value="Done">Done</option>
+                                <option value="WIP">In Progress</option>
+                                <option value="Hold">Hold</option>
+                                <option value="Support Required">Support Required</option>
+                              </>
+                            )}
                           </select>
                         </td>
                         <td style={{ padding: '0.75rem' }}>
