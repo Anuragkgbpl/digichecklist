@@ -15,40 +15,37 @@ const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'
 const STATUS_COLORS = { Done: '#10B981', WIP: '#3B82F6', Hold: '#F59E0B', Overdue: '#EF4444', Pending: '#94A3B8' };
 
 // Helper Component for Shuffling Frequency Trend Line Graphs (Extracted to Top Level to prevent re-creation cycles)
-const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions, filterKey, filterLabel }) => {
+const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions }) => {
   const [activeFreq, setActiveFreq] = useState('ALL');
-  const [activeSubFilter, setActiveSubFilter] = useState('ALL');
+  const [trendDays, setTrendDays] = useState(7);
+  const [filterLine, setFilterLine] = useState('ALL');
+  const [filterActType, setFilterActType] = useState('ALL');
+  const [filterSubLine, setFilterSubLine] = useState('ALL');
+  const [filterComponent, setFilterComponent] = useState('ALL');
 
-  // Compute available filter options for this specific parent dimension
-  const subFilterOptions = useMemo(() => {
-    if (!filterKey) return [];
-    const unique = [...new Set(submissions.map(s => s[filterKey]).filter(x => x && x !== '-'))];
-    unique.sort((a, b) => String(a).localeCompare(String(b)));
-    return unique;
-  }, [submissions, filterKey]);
+  const lines = useMemo(() => [...new Set(submissions.map(s => s.Line_Equipment).filter(Boolean))].sort(), [submissions]);
+  const actTypes = useMemo(() => [...new Set(submissions.filter(s => filterLine === 'ALL' || s.Line_Equipment === filterLine).map(s => s.Type_of_Activity).filter(Boolean))].sort(), [submissions, filterLine]);
+  const subLines = useMemo(() => [...new Set(submissions.filter(s => (filterLine === 'ALL' || s.Line_Equipment === filterLine) && (filterActType === 'ALL' || s.Type_of_Activity === filterActType)).map(s => s.Sub_Line_Equipment).filter(Boolean))].sort(), [submissions, filterLine, filterActType]);
+  const components = useMemo(() => [...new Set(submissions.filter(s => (filterLine === 'ALL' || s.Line_Equipment === filterLine) && (filterActType === 'ALL' || s.Type_of_Activity === filterActType) && (filterSubLine === 'ALL' || s.Sub_Line_Equipment === filterSubLine)).map(s => s.Component).filter(Boolean))].sort(), [submissions, filterLine, filterActType, filterSubLine]);
+
+  useEffect(() => { if(filterActType !== 'ALL' && !actTypes.includes(filterActType)) setFilterActType('ALL'); }, [actTypes, filterActType]);
+  useEffect(() => { if(filterSubLine !== 'ALL' && !subLines.includes(filterSubLine)) setFilterSubLine('ALL'); }, [subLines, filterSubLine]);
+  useEffect(() => { if(filterComponent !== 'ALL' && !components.includes(filterComponent)) setFilterComponent('ALL'); }, [components, filterComponent]);
 
   const trend = useMemo(() => {
-    const dates = Array.from({ length: 7 }, (_, i) => {
+    const dates = Array.from({ length: trendDays }, (_, i) => {
       const d = new Date();
-      d.setDate(d.getDate() - (6 - i));
+      d.setDate(d.getDate() - ((trendDays - 1) - i));
       return d.toISOString().split('T')[0];
     });
 
     let source = submissions;
     
-    // 1. Filter by active frequency
-    if (activeFreq && activeFreq !== 'ALL') {
-      source = source.filter(s => 
-        String(s.Frequency || '').trim().toLowerCase() === activeFreq.trim().toLowerCase()
-      );
-    }
-    
-    // 2. Filter by the requested dimension parent filter
-    if (filterKey && activeSubFilter && activeSubFilter !== 'ALL') {
-      source = source.filter(s => 
-        String(s[filterKey] || '').trim().toLowerCase() === activeSubFilter.trim().toLowerCase()
-      );
-    }
+    if (activeFreq && activeFreq !== 'ALL') source = source.filter(s => String(s.Frequency || '').trim().toLowerCase() === activeFreq.trim().toLowerCase());
+    if (filterLine !== 'ALL') source = source.filter(s => s.Line_Equipment === filterLine);
+    if (filterActType !== 'ALL') source = source.filter(s => s.Type_of_Activity === filterActType);
+    if (filterSubLine !== 'ALL') source = source.filter(s => s.Sub_Line_Equipment === filterSubLine);
+    if (filterComponent !== 'ALL') source = source.filter(s => s.Component === filterComponent);
 
     const counts = {};
     source.forEach(s => {
@@ -65,7 +62,7 @@ const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions, filte
         const checkDate = (s.Date_Timestamp || s.Date || '').split('T')[0];
         return checkDate === dt;
       });
-      const label = dt.split('-').reverse().join('/');
+      const label = dt.split('-').reverse().slice(0, 2).join('/');
       const row = { name: label };
       topEntities.forEach(ent => {
         row[ent] = dayLogs.filter(l => l[pivotKey] === ent && l.Status === 'Done').length;
@@ -74,37 +71,57 @@ const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions, filte
     });
 
     return { chartData, topEntities };
-  }, [activeFreq, activeSubFilter, submissions, pivotKey, filterKey]);
+  }, [activeFreq, trendDays, filterLine, filterActType, filterSubLine, filterComponent, submissions, pivotKey]);
+
+  const selectStyle = { padding: '0.25rem 0.4rem', fontSize: '0.68rem', borderRadius: '6px', border: '1px solid #CBD5E1', cursor: 'pointer', outline: 'none', fontWeight: 600, backgroundColor: '#FFF', maxWidth: '100px' };
 
   return (
-    <div className="card" style={{ minHeight: '320px', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>
-          {Icon && <Icon size={16} color="#6366F1" />} {title}
+    <div className="card" style={{ minHeight: '380px', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', borderBottom: '1px solid #F1F5F9', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>
+            {Icon && <Icon size={16} color="#6366F1" />} {title}
+          </div>
+          <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <select value={trendDays} onChange={e => setTrendDays(Number(e.target.value))} style={selectStyle}>
+              <option value={7}>7 Days</option>
+              <option value={14}>14 Days</option>
+              <option value={30}>30 Days</option>
+            </select>
+            <select value={activeFreq} onChange={e => setActiveFreq(e.target.value)} style={selectStyle}>
+              <option value="ALL">Freq: ALL</option>
+              <option value="Daily">Daily</option>
+              <option value="Shift-wise">Shift-wise</option>
+              <option value="Weekly">Weekly</option>
+              <option value="Monthly">Monthly</option>
+            </select>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {filterKey && subFilterOptions.length > 0 && (
-            <select 
-              value={activeSubFilter} 
-              onChange={e => setActiveSubFilter(e.target.value)}
-              style={{ padding: '0.25rem 0.4rem', fontSize: '0.68rem', borderRadius: '6px', border: '1px solid #CBD5E1', cursor: 'pointer', outline: 'none', fontWeight: 600, backgroundColor: '#FFF', maxWidth: '95px' }}
-              title={`Filter by ${filterLabel}`}
-            >
-              <option value="ALL">{filterLabel}: ALL</option>
-              {subFilterOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+        <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+          {pivotKey !== 'Line_Equipment' && (
+            <select value={filterLine} onChange={e => setFilterLine(e.target.value)} style={selectStyle} title="Filter by Line">
+              <option value="ALL">Line: ALL</option>
+              {lines.map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
           )}
-          <select 
-            value={activeFreq} 
-            onChange={e => setActiveFreq(e.target.value)}
-            style={{ padding: '0.25rem 0.4rem', fontSize: '0.68rem', borderRadius: '6px', border: '1px solid #CBD5E1', cursor: 'pointer', outline: 'none', fontWeight: 600, backgroundColor: '#FFF' }}
-          >
-            <option value="ALL">Freq: ALL</option>
-            <option value="Daily">Daily</option>
-            <option value="Shift-wise">Shift-wise</option>
-            <option value="Weekly">Weekly</option>
-            <option value="Monthly">Monthly</option>
-          </select>
+          {pivotKey !== 'Type_of_Activity' && (
+            <select value={filterActType} onChange={e => setFilterActType(e.target.value)} style={selectStyle} title="Filter by Activity Type">
+              <option value="ALL">Act. Type: ALL</option>
+              {actTypes.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          )}
+          {pivotKey !== 'Sub_Line_Equipment' && (
+            <select value={filterSubLine} onChange={e => setFilterSubLine(e.target.value)} style={selectStyle} title="Filter by Sub-Line">
+              <option value="ALL">Sub-Line: ALL</option>
+              {subLines.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          )}
+          {pivotKey !== 'Component' && (
+            <select value={filterComponent} onChange={e => setFilterComponent(e.target.value)} style={selectStyle} title="Filter by Component">
+              <option value="ALL">Component: ALL</option>
+              {components.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          )}
         </div>
       </div>
       
@@ -113,7 +130,7 @@ const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions, filte
           No trend data identified for selected filters.
         </div>
       ) : (
-        <div style={{ height: '220px', width: '100%' }}>
+        <div style={{ height: '220px', width: '100%', marginTop: 'auto' }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={trend.chartData} margin={{ top: 5, right: 10, left: -30, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
@@ -134,7 +151,44 @@ const DynamicDimensionTrend = ({ title, pivotKey, icon: Icon, submissions, filte
 
 const AdvancedAnalyticsDashboard = ({ preFilteredData, baseChecklists }) => {
   const { submissions: rawAllSub = [], checklists: rawAllCheck = [], shifts = [] } = useData();
+  // Use props passed from filtered parent dashboard, fallback safely
+  const submissions = preFilteredData !== undefined ? preFilteredData : rawAllSub;
+  const checklists = baseChecklists !== undefined ? baseChecklists : rawAllCheck;
+
   const [trendPivot, setTrendPivot] = useState('shift');
+
+  const [lineEquipFilterFreq, setLineEquipFilterFreq] = useState('ALL');
+  const [lineEquipFilterActType, setLineEquipFilterActType] = useState('ALL');
+  const [lineEquipFilterSubLine, setLineEquipFilterSubLine] = useState('ALL');
+  const [lineEquipFilterComponent, setLineEquipFilterComponent] = useState('ALL');
+
+  const [trendCenterFilterLine, setTrendCenterFilterLine] = useState('ALL');
+  const [trendCenterFilterActType, setTrendCenterFilterActType] = useState('ALL');
+  const [trendCenterFilterSubLine, setTrendCenterFilterSubLine] = useState('ALL');
+  const [trendCenterFilterComponent, setTrendCenterFilterComponent] = useState('ALL');
+
+  const tcFilterOptions = useMemo(() => {
+    const allData = [...checklists, ...submissions];
+    const lines = [...new Set(allData.map(d => d.Line_Equipment).filter(Boolean))].sort();
+    
+    let dataForActType = allData;
+    if (trendCenterFilterLine !== 'ALL') dataForActType = dataForActType.filter(d => d.Line_Equipment === trendCenterFilterLine);
+    const actTypes = [...new Set(dataForActType.map(d => d.Type_of_Activity).filter(Boolean))].sort();
+    
+    let dataForSubLine = dataForActType;
+    if (trendCenterFilterActType !== 'ALL') dataForSubLine = dataForSubLine.filter(d => d.Type_of_Activity === trendCenterFilterActType);
+    const subLines = [...new Set(dataForSubLine.map(d => d.Sub_Line_Equipment).filter(Boolean))].sort();
+    
+    let dataForComp = dataForSubLine;
+    if (trendCenterFilterSubLine !== 'ALL') dataForComp = dataForComp.filter(d => d.Sub_Line_Equipment === trendCenterFilterSubLine);
+    const components = [...new Set(dataForComp.map(d => d.Component).filter(Boolean))].sort();
+
+    return { lines, actTypes, subLines, components };
+  }, [checklists, submissions, trendCenterFilterLine, trendCenterFilterActType, trendCenterFilterSubLine]);
+
+  useEffect(() => { if (trendCenterFilterActType !== 'ALL' && !tcFilterOptions.actTypes.includes(trendCenterFilterActType)) setTrendCenterFilterActType('ALL'); }, [tcFilterOptions.actTypes, trendCenterFilterActType]);
+  useEffect(() => { if (trendCenterFilterSubLine !== 'ALL' && !tcFilterOptions.subLines.includes(trendCenterFilterSubLine)) setTrendCenterFilterSubLine('ALL'); }, [tcFilterOptions.subLines, trendCenterFilterSubLine]);
+  useEffect(() => { if (trendCenterFilterComponent !== 'ALL' && !tcFilterOptions.components.includes(trendCenterFilterComponent)) setTrendCenterFilterComponent('ALL'); }, [tcFilterOptions.components, trendCenterFilterComponent]);
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   useEffect(() => {
@@ -142,10 +196,6 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData, baseChecklists }) => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-  
-  // Use props passed from filtered parent dashboard, fallback safely
-  const submissions = preFilteredData !== undefined ? preFilteredData : rawAllSub;
-  const checklists = baseChecklists !== undefined ? baseChecklists : rawAllCheck;
 
   const shiftMaster = useMemo(() => {
     const obj = {};
@@ -234,24 +284,92 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData, baseChecklists }) => {
     return { done, pending, triggered, shiftDist, typeBreakdown, activityDetailGrid, frequencyDetailGrid };
   }, [submissions, checklists, prodDateStr]);
 
-  // 2. OVERDUE AGING ANALYSIS
-  const overdueAging = useMemo(() => {
-    const today = new Date();
-    const overdueTasks = submissions.filter(s => s.Status === 'Pending' || s.Status === 'Hold');
-    let underShift = 0, oneDay = 0, older = 0;
-    overdueTasks.forEach(task => {
-      const taskTime = new Date(task.Date_Timestamp || task.Date);
-      const diffHrs = (today - taskTime) / (1000 * 60 * 60);
-      if (diffHrs < 8) underShift++;
-      else if (diffHrs < 24) oneDay++;
-      else older++;
+  const lineEquipStats = useMemo(() => {
+    let leChecklists = checklists;
+    let leSubmissions = submissions;
+
+    if (lineEquipFilterFreq !== 'ALL') {
+      leChecklists = leChecklists.filter(c => c.Frequency === lineEquipFilterFreq);
+      leSubmissions = leSubmissions.filter(s => s.Frequency === lineEquipFilterFreq);
+    }
+    if (lineEquipFilterActType !== 'ALL') {
+      leChecklists = leChecklists.filter(c => c.Type_of_Activity === lineEquipFilterActType);
+      leSubmissions = leSubmissions.filter(s => s.Type_of_Activity === lineEquipFilterActType);
+    }
+    if (lineEquipFilterSubLine !== 'ALL') {
+      leChecklists = leChecklists.filter(c => c.Sub_Line_Equipment === lineEquipFilterSubLine);
+      leSubmissions = leSubmissions.filter(s => s.Sub_Line_Equipment === lineEquipFilterSubLine);
+    }
+    if (lineEquipFilterComponent !== 'ALL') {
+      leChecklists = leChecklists.filter(c => c.Component === lineEquipFilterComponent);
+      leSubmissions = leSubmissions.filter(s => s.Component === lineEquipFilterComponent);
+    }
+
+    const lines = [...new Set([...leChecklists.map(c => c.Line_Equipment), ...leSubmissions.map(s => s.Line_Equipment)].filter(Boolean))].sort();
+
+    const lineEquipDetailGrid = lines.map(line => {
+      const alloc = leChecklists.filter(c => c.Line_Equipment === line).length;
+      const acts = leSubmissions.filter(s => s.Line_Equipment === line);
+      return {
+        name: line,
+        allocated: alloc,
+        done: acts.filter(a => a.Status === 'Done').length,
+        pending: acts.filter(a => a.Status === 'Pending').length,
+        wip: acts.filter(a => a.Status === 'WIP').length,
+        hold: acts.filter(a => a.Status === 'Hold').length,
+        support: acts.filter(a => a.Status === 'Support Required' || a.Status === 'Support').length,
+        isCumulative: false
+      };
+    }).sort((a, b) => b.allocated - a.allocated);
+
+    lineEquipDetailGrid.push({
+      name: 'Cumulative (Total)',
+      allocated: leChecklists.length,
+      done: leSubmissions.filter(a => a.Status === 'Done').length,
+      pending: leSubmissions.filter(a => a.Status === 'Pending').length,
+      wip: leSubmissions.filter(a => a.Status === 'WIP').length,
+      hold: leSubmissions.filter(a => a.Status === 'Hold').length,
+      support: leSubmissions.filter(a => a.Status === 'Support Required' || a.Status === 'Support').length,
+      isCumulative: true
     });
-    return [
-      { name: '< 1 Shift', value: underShift, fill: '#FBBF24' },
-      { name: '1 Day', value: oneDay, fill: '#F97316' },
-      { name: '2+ Days', value: older, fill: '#EF4444' }
-    ];
-  }, [submissions]);
+
+    return { lineEquipDetailGrid };
+  }, [checklists, submissions, lineEquipFilterActType, lineEquipFilterSubLine, lineEquipFilterComponent]);
+
+  const filterOptions = useMemo(() => {
+    const allData = [...checklists, ...submissions];
+    const freqs = [...new Set(allData.map(d => d.Frequency).filter(Boolean))].sort();
+    const actTypes = [...new Set(allData.map(d => d.Type_of_Activity).filter(Boolean))].sort();
+    
+    // Filter data for sub-lines based on selected activity type
+    let dataForSubLine = allData;
+    if (lineEquipFilterActType !== 'ALL') {
+      dataForSubLine = dataForSubLine.filter(d => d.Type_of_Activity === lineEquipFilterActType);
+    }
+    const subLines = [...new Set(dataForSubLine.map(d => d.Sub_Line_Equipment).filter(Boolean))].sort();
+    
+    // Filter data for components based on selected activity type and sub-line
+    let dataForComponent = dataForSubLine;
+    if (lineEquipFilterSubLine !== 'ALL') {
+      dataForComponent = dataForComponent.filter(d => d.Sub_Line_Equipment === lineEquipFilterSubLine);
+    }
+    const components = [...new Set(dataForComponent.map(d => d.Component).filter(Boolean))].sort();
+
+    return { freqs, actTypes, subLines, components };
+  }, [checklists, submissions, lineEquipFilterActType, lineEquipFilterSubLine]);
+
+  // Handle cascading filter resets
+  useEffect(() => {
+    if (lineEquipFilterSubLine !== 'ALL' && !filterOptions.subLines.includes(lineEquipFilterSubLine)) {
+      setLineEquipFilterSubLine('ALL');
+    }
+  }, [filterOptions.subLines, lineEquipFilterSubLine]);
+
+  useEffect(() => {
+    if (lineEquipFilterComponent !== 'ALL' && !filterOptions.components.includes(lineEquipFilterComponent)) {
+      setLineEquipFilterComponent('ALL');
+    }
+  }, [filterOptions.components, lineEquipFilterComponent]);
 
   // 3. FREQUENCY COMPLIANCE
   const freqCompliance = useMemo(() => {
@@ -517,6 +635,143 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData, baseChecklists }) => {
           )}
         </div>
 
+        {/* Line / Equip Wise Realization & Detailed Backlog */}
+        <div className="card" style={{ marginTop: '1.5rem', borderTop: '1px solid #E2E8F0', padding: '1.25rem' }}>
+          <div style={{ ...cardHeaderStyle, border: 'none', padding: 0, marginBottom: '1rem', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <Layers size={18} color="#10B981" /> Line / Equip-Wise Realization & Detailed Backlog
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <select 
+                value={lineEquipFilterFreq} 
+                onChange={e => setLineEquipFilterFreq(e.target.value)}
+                style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem', borderRadius: '6px', border: '1px solid #CBD5E1', outline: 'none', backgroundColor: '#FFF', minWidth: '120px' }}
+              >
+                <option value="ALL">Frequency: ALL</option>
+                {filterOptions.freqs.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+              <select 
+                value={lineEquipFilterActType} 
+                onChange={e => setLineEquipFilterActType(e.target.value)}
+                style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem', borderRadius: '6px', border: '1px solid #CBD5E1', outline: 'none', backgroundColor: '#FFF', minWidth: '120px' }}
+              >
+                <option value="ALL">Activity Type: ALL</option>
+                {filterOptions.actTypes.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+              <select 
+                value={lineEquipFilterSubLine} 
+                onChange={e => setLineEquipFilterSubLine(e.target.value)}
+                style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem', borderRadius: '6px', border: '1px solid #CBD5E1', outline: 'none', backgroundColor: '#FFF', minWidth: '120px' }}
+              >
+                <option value="ALL">Sub-Line: ALL</option>
+                {filterOptions.subLines.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+              <select 
+                value={lineEquipFilterComponent} 
+                onChange={e => setLineEquipFilterComponent(e.target.value)}
+                style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem', borderRadius: '6px', border: '1px solid #CBD5E1', outline: 'none', backgroundColor: '#FFF', minWidth: '120px' }}
+              >
+                <option value="ALL">Component: ALL</option>
+                {filterOptions.components.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </div>
+          </div>
+          {isMobile ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '400px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+              {lineEquipStats.lineEquipDetailGrid.map(row => {
+                const completedRate = Math.min(100, row.allocated > 0 ? Math.round((row.done / row.allocated) * 100) : 0);
+                const isCum = row.isCumulative;
+                return (
+                  <div key={row.name} style={{ border: isCum ? '2px solid #10B981' : '1px solid #E2E8F0', borderRadius: '10px', padding: '0.85rem', backgroundColor: isCum ? '#ECFDF5' : 'white' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                      <span style={{ fontWeight: isCum ? 800 : 700, fontSize: '0.85rem', color: isCum ? '#065F46' : '#334155' }}>{row.name}</span>
+                      <span style={{ fontSize: '0.75rem', color: isCum ? '#047857' : '#64748B', fontWeight: 800 }}>{completedRate}% Done</span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.75rem' }}>
+                      <div style={{ width: `${completedRate}%`, height: '100%', backgroundColor: isCum ? '#059669' : '#10B981' }} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700 }}>
+                      <div style={{ background: '#F8FAFC', padding: '0.4rem', borderRadius: '6px' }}><div style={{color: '#64748B', fontSize: '0.6rem'}}>Alloc</div>{row.allocated}</div>
+                      <div style={{ background: '#DCFCE7', color: '#166534', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Done</div>{row.done}</div>
+                      <div style={{ background: '#EFF6FF', color: '#2563EB', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>WIP</div>{row.wip || 0}</div>
+                      <div style={{ background: '#FFFBEB', color: '#D97706', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Hold</div>{row.hold || 0}</div>
+                      <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Support</div>{row.support || 0}</div>
+                      <div style={{ background: '#F8FAFC', color: '#64748B', padding: '0.4rem', borderRadius: '6px' }}><div style={{fontSize: '0.6rem'}}>Pend</div>{row.pending || 0}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="table-container-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: '#F8FAFC' }}>
+                  <tr style={{ color: '#475569' }}>
+                    <th style={{ padding: '0.6rem 1rem', borderRadius: '6px 0 0 6px', backgroundColor: '#F8FAFC' }}>Line / Equipment</th>
+                    <th style={{ padding: '0.6rem', textAlign: 'center', backgroundColor: '#F8FAFC' }}>Allocated</th>
+                    <th style={{ padding: '0.6rem', textAlign: 'center', color: '#10B981', backgroundColor: '#F8FAFC' }}>Completed</th>
+                    <th style={{ padding: '0.6rem', textAlign: 'center', color: '#3B82F6', backgroundColor: '#F8FAFC' }}>WIP</th>
+                    <th style={{ padding: '0.6rem', textAlign: 'center', color: '#F59E0B', backgroundColor: '#F8FAFC' }}>Hold</th>
+                    <th style={{ padding: '0.6rem', textAlign: 'center', color: '#EF4444', backgroundColor: '#F8FAFC' }}>Support Req.</th>
+                    <th style={{ padding: '0.6rem', textAlign: 'center', color: '#94A3B8', backgroundColor: '#F8FAFC' }}>Pending</th>
+                    <th style={{ padding: '0.6rem 1rem', textAlign: 'right', borderRadius: '0 6px 6px 0', backgroundColor: '#F8FAFC' }}>Effort Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineEquipStats.lineEquipDetailGrid.map(row => {
+                    const completedRate = Math.min(100, row.allocated > 0 ? Math.round((row.done / row.allocated) * 100) : 0);
+                    const isCum = row.isCumulative;
+                    return (
+                      <tr key={row.name} style={{ 
+                        borderBottom: isCum ? 'none' : '1px solid #F1F5F9', 
+                        backgroundColor: isCum ? '#ECFDF5' : 'transparent',
+                        fontWeight: isCum ? 700 : 400,
+                        borderTop: isCum ? '2px solid #10B981' : 'none'
+                      }}>
+                        <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: isCum ? '#065F46' : '#334155' }}>{row.name}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600 }}>{row.allocated}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem' }}>
+                            <span style={{ background: '#DCFCE7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 700 }}>{row.done}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem', color: row.wip > 0 ? '#2563EB' : '#CBD5E1', fontWeight: row.wip > 0 ? 700 : 400 }}>
+                            <span>{row.wip || 0}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem', color: row.hold > 0 ? '#D97706' : '#CBD5E1', fontWeight: row.hold > 0 ? 700 : 400 }}>
+                            <span>{row.hold || 0}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem', color: row.support > 0 ? '#DC2626' : '#CBD5E1', fontWeight: row.support > 0 ? 700 : 400 }}>
+                            <span>{row.support || 0}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem', color: isCum ? '#065F46' : '#64748B', fontWeight: 600 }}>
+                            <span>{row.pending || 0}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                            <div style={{ width: '60px', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{ width: `${completedRate}%`, height: '100%', backgroundColor: isCum ? '#059669' : '#10B981' }} />
+                            </div>
+                            <span style={{ fontSize: '0.7rem', color: isCum ? '#065F46' : '#64748B', width: '30px' }}>{completedRate}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
         {/* Backward Hierarchy Worst Offenders Highlighting */}
         {laggingActivities.length > 0 && (
           <div className="card" style={{ marginTop: '1.5rem', border: '1.5px solid #FCA5A5', backgroundColor: '#FFF5F5' }}>
@@ -584,19 +839,44 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData, baseChecklists }) => {
           </div>
         </div>
 
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <select value={trendCenterFilterLine} onChange={e => setTrendCenterFilterLine(e.target.value)} style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem', borderRadius: '6px', border: '1px solid #CBD5E1', outline: 'none', backgroundColor: '#FFF' }}>
+              <option value="ALL">Line: ALL</option>
+              {tcFilterOptions.lines.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+            <select value={trendCenterFilterActType} onChange={e => setTrendCenterFilterActType(e.target.value)} style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem', borderRadius: '6px', border: '1px solid #CBD5E1', outline: 'none', backgroundColor: '#FFF' }}>
+              <option value="ALL">Activity Type: ALL</option>
+              {tcFilterOptions.actTypes.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+            <select value={trendCenterFilterSubLine} onChange={e => setTrendCenterFilterSubLine(e.target.value)} style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem', borderRadius: '6px', border: '1px solid #CBD5E1', outline: 'none', backgroundColor: '#FFF' }}>
+              <option value="ALL">Sub-Line: ALL</option>
+              {tcFilterOptions.subLines.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+            <select value={trendCenterFilterComponent} onChange={e => setTrendCenterFilterComponent(e.target.value)} style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem', borderRadius: '6px', border: '1px solid #CBD5E1', outline: 'none', backgroundColor: '#FFF' }}>
+              <option value="ALL">Component: ALL</option>
+              {tcFilterOptions.components.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+        </div>
+
         <div style={{ height: '320px' }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={(() => {
-              const past7Dates = [...new Set(submissions.map(s => s.Date).filter(Boolean))].sort().slice(-7);
+              let filteredSubs = submissions;
+              if (trendCenterFilterLine !== 'ALL') filteredSubs = filteredSubs.filter(s => s.Line_Equipment === trendCenterFilterLine);
+              if (trendCenterFilterActType !== 'ALL') filteredSubs = filteredSubs.filter(s => s.Type_of_Activity === trendCenterFilterActType);
+              if (trendCenterFilterSubLine !== 'ALL') filteredSubs = filteredSubs.filter(s => s.Sub_Line_Equipment === trendCenterFilterSubLine);
+              if (trendCenterFilterComponent !== 'ALL') filteredSubs = filteredSubs.filter(s => s.Component === trendCenterFilterComponent);
+
+              const past7Dates = [...new Set(filteredSubs.map(s => s.Date).filter(Boolean))].sort().slice(-7);
               
               let pivotKey = 'Shift';
               if(trendPivot === 'frequency') pivotKey = 'Frequency';
               if(trendPivot === 'doc') pivotKey = 'Document_Number';
 
-              const pivotEntries = [...new Set(submissions.map(s => s[pivotKey] || 'Unknown'))].filter(x => x !== '-').slice(0, 5);
+              const pivotEntries = [...new Set(filteredSubs.map(s => s[pivotKey] || 'Unknown'))].filter(x => x !== '-').slice(0, 5);
 
               return past7Dates.map(dt => {
-                const dayLogs = submissions.filter(s => s.Date === dt && s.Status === 'Done');
+                const dayLogs = filteredSubs.filter(s => s.Date === dt && s.Status === 'Done');
                 const row = { name: dt };
                 pivotEntries.forEach(entry => {
                   row[entry] = dayLogs.filter(l => l[pivotKey] === entry).length;
@@ -610,10 +890,16 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData, baseChecklists }) => {
               <Tooltip />
               <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 500 }} />
               {(() => {
+                let filteredSubs = submissions;
+                if (trendCenterFilterLine !== 'ALL') filteredSubs = filteredSubs.filter(s => s.Line_Equipment === trendCenterFilterLine);
+                if (trendCenterFilterActType !== 'ALL') filteredSubs = filteredSubs.filter(s => s.Type_of_Activity === trendCenterFilterActType);
+                if (trendCenterFilterSubLine !== 'ALL') filteredSubs = filteredSubs.filter(s => s.Sub_Line_Equipment === trendCenterFilterSubLine);
+                if (trendCenterFilterComponent !== 'ALL') filteredSubs = filteredSubs.filter(s => s.Component === trendCenterFilterComponent);
+
                 let pivotKey = 'Shift';
                 if(trendPivot === 'frequency') pivotKey = 'Frequency';
                 if(trendPivot === 'doc') pivotKey = 'Document_Number';
-                const pivotEntries = [...new Set(submissions.map(s => s[pivotKey] || 'Unknown'))].filter(x => x !== '-').slice(0, 5);
+                const pivotEntries = [...new Set(filteredSubs.map(s => s[pivotKey] || 'Unknown'))].filter(x => x !== '-').slice(0, 5);
                 
                 return pivotEntries.map((entry, idx) => (
                   <Line key={entry} type="monotone" dataKey={entry} stroke={COLORS[idx % COLORS.length]} strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
@@ -649,31 +935,6 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData, baseChecklists }) => {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Overdue Aging Pie */}
-          <div className="card">
-            <div style={cardHeaderStyle}><Clock size={18} color="#F59E0B" /> Overdue Aging Breakdown</div>
-            <div style={{ height: isMobile ? 'auto' : '250px', display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: 'center' }}>
-              <div style={{ width: isMobile ? '100%' : '60%', height: '250px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={overdueAging} innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value">
-                      {overdueAging.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div style={{ display: 'flex', flexDirection: isMobile ? 'row' : 'column', justifyContent: 'center', flexWrap: 'wrap', gap: '1rem', flex: 1, paddingBottom: isMobile ? '1rem' : 0 }}>
-                {overdueAging.map(x => (
-                  <div key={x.name} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: x.fill }} />
-                    <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{x.name}: <strong style={{ fontSize: '0.9rem' }}>{x.value}</strong></span>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
 
@@ -768,14 +1029,14 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData, baseChecklists }) => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <TrendingUp size={22} fill="#6366F1" color="#6366F1" />
-          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>LEVEL 4: Multi-Dimension Completion Performance (7-Day Trend)</h2>
+          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>LEVEL 4: Multi-Dimension Completion Performance (Trend Analysis)</h2>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '1.5rem' }}>
-          <DynamicDimensionTrend title="Daily Trend: Type of Activity" pivotKey="Type_of_Activity" icon={Activity} submissions={submissions} filterKey="Line_Equipment" filterLabel="Line" />
-          <DynamicDimensionTrend title="Daily Trend: Line Equipment" pivotKey="Line_Equipment" icon={Layers} submissions={submissions} filterKey="Type_of_Activity" filterLabel="Act. Type" />
-          <DynamicDimensionTrend title="Daily Trend: Sub-Line Equipment" pivotKey="Sub_Line_Equipment" icon={Map} submissions={submissions} filterKey="Line_Equipment" filterLabel="Line" />
-          <DynamicDimensionTrend title="Daily Trend: Components" pivotKey="Component" icon={Settings} submissions={submissions} filterKey="Sub_Line_Equipment" filterLabel="Sub-Line" />
+          <DynamicDimensionTrend title="Trend: Type of Activity" pivotKey="Type_of_Activity" icon={Activity} submissions={submissions} />
+          <DynamicDimensionTrend title="Trend: Line Equipment" pivotKey="Line_Equipment" icon={Layers} submissions={submissions} />
+          <DynamicDimensionTrend title="Trend: Sub-Line Equipment" pivotKey="Sub_Line_Equipment" icon={Map} submissions={submissions} />
+          <DynamicDimensionTrend title="Trend: Component Failure" pivotKey="Component" icon={Settings} submissions={submissions} />
         </div>
       </div>
     </div>
