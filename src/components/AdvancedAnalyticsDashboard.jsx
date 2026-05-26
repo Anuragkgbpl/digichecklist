@@ -334,7 +334,7 @@ const AdvancedAnalyticsDashboard = ({ preFilteredData, baseChecklists }) => {
     });
 
     return { lineEquipDetailGrid };
-  }, [checklists, submissions, lineEquipFilterActType, lineEquipFilterSubLine, lineEquipFilterComponent]);
+  }, [checklists, submissions, lineEquipFilterFreq, lineEquipFilterActType, lineEquipFilterSubLine, lineEquipFilterComponent]);
 
   const filterOptions = useMemo(() => {
     const allData = [...checklists, ...submissions];
