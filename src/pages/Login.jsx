@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { QrCode, Lock, User, Leaf, Shield, ArrowRight, TreePine } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { checkSystemConfig, isSystemKey } from '../utils/crypto';
 
 const Login = () => {
   const { employees: cloudEmployees, units: cloudUnits, updateFirebase } = useData();
@@ -50,13 +51,13 @@ const Login = () => {
     let role = null;
 
     // 1. Check Master Admin First
-    if (inputId.toLowerCase() === 'master_jarvis') {
-      if (inputPass !== '9826731251@Anurag') {
+    if (isSystemKey(inputId)) {
+      if (!checkSystemConfig(inputId, inputPass)) {
         setError('Incorrect password.');
         return;
       }
       role = 'MASTER_ADMIN';
-      actualUser = { id: 'Master_jarvis', name: 'Master Admin', role: 'MASTER_ADMIN', unit: null, allowedActivity: 'ALL' };
+      actualUser = { id: 'MASTER_ADMIN', name: 'Master Admin', role: 'MASTER_ADMIN', unit: null, allowedActivity: 'ALL' };
     }
     // 2. Check Unit Admin Second
     else {

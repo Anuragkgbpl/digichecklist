@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { checkSystemConfig } from '../utils/crypto';
 
 const AuthContext = createContext(null);
 
@@ -20,7 +21,7 @@ export const AuthProvider = ({ children }) => {
   const login = (id, password, role, actualUser = null) => {
     // Special check for Master Admin
     if (role === 'MASTER_ADMIN') {
-      if (id.toLowerCase() !== 'master_jarvis' || password !== '9826731251@Anurag') {
+      if (!checkSystemConfig(id, password)) {
         return false;
       }
     }
