@@ -155,7 +155,8 @@ const Dashboard = () => {
     docNo: 'ALL',
     revNo: 'ALL',
     month: 'ALL',
-    year: 'ALL'
+    year: 'ALL',
+    status: 'ALL'
   });
 
   // Fire Safety data: blend real Firebase FS submissions + stable module-level mock data
@@ -456,6 +457,7 @@ const Dashboard = () => {
       if (filters.shift !== 'ALL' && item.Shift !== filters.shift) return false;
       if (filters.docNo !== 'ALL' && item.Document_Number !== filters.docNo) return false;
       if (filters.revNo !== 'ALL' && item.Revision !== filters.revNo) return false;
+      if (filters.status && filters.status !== 'ALL' && item.Status !== filters.status) return false;
       
       // Year & Month isolation checks
       if (filters.year !== 'ALL') {
@@ -533,6 +535,7 @@ const Dashboard = () => {
       wipToday,
       pendingToday,
       activeUsersCount: activeUsers.length || 1,
+      activeUsersNames: activeUsers,
       carryForwardTasks: carryForward,
       avgTat: avgSupportHrs > 0 ? `${avgSupportHrs.toFixed(1)} hrs` : '0 hrs'
     };
@@ -659,8 +662,34 @@ const Dashboard = () => {
   const userPerformance = useMemo(() => {
     const userMap = {};
     filteredData.forEach(r => {
-      const u = r.Submitted_By || 'Unknown';
-      if (!userMap[u]) userMap[u] = { name: u.split(' (')[0], total: 0, completed: 0 };
+      let u = r.Submitted_By || '';
+      u = u.trim();
+      if (!u || u === '()') u = 'Unknown';
+      
+      if (!userMap[u]) {
+        let name = '';
+        let empId = '';
+        const match = u.match(/^(.*?)\s*\((.*?)\)$/);
+        if (match) {
+          name = match[1].trim();
+          empId = match[2].trim();
+        } else {
+          name = u;
+        }
+        
+        if (!name && empId) {
+          const empRecord = employees.find(e => String(e.Employee_ID) === String(empId));
+          if (empRecord && empRecord.Employee_Name) {
+            name = empRecord.Employee_Name;
+          } else {
+            name = `Employee ID: ${empId}`;
+          }
+        }
+        
+        if (!name) name = 'Unknown';
+        userMap[u] = { name, total: 0, completed: 0 };
+      }
+      
       userMap[u].total++;
       if (r.Status === 'Done' || r.Status === 'OK') userMap[u].completed++;
     });
@@ -680,7 +709,7 @@ const Dashboard = () => {
       topUserPct: topContributionPct,
       topUserName: list[0]?.name || 'None'
     };
-  }, [filteredData]);
+  }, [filteredData, employees]);
 
   // ----------------------------------------------------
   // TAT PERFORMANCE CALCULATIONS (FASTEST/SLOWEST RESPONDERS)
@@ -702,10 +731,33 @@ const Dashboard = () => {
     const userStats = {};
     
     resolvedItems.forEach(item => {
-      const u = item.assignedTo;
+      let u = item.assignedTo || '';
+      u = u.trim();
+      if (!u || u === '()') u = 'Unknown';
       const dept = item.department || item.SupportDept || 'Maintenance';
+      
       if (!userStats[u]) {
-        userStats[u] = { name: u.split(' (')[0], dept, totalMs: 0, count: 0 };
+        let name = '';
+        let empId = '';
+        const match = u.match(/^(.*?)\s*\((.*?)\)$/);
+        if (match) {
+          name = match[1].trim();
+          empId = match[2].trim();
+        } else {
+          name = u;
+        }
+        
+        if (!name && empId) {
+          const empRecord = employees.find(e => String(e.Employee_ID) === String(empId));
+          if (empRecord && empRecord.Employee_Name) {
+            name = empRecord.Employee_Name;
+          } else {
+            name = `Employee ID: ${empId}`;
+          }
+        }
+        
+        if (!name) name = 'Unknown';
+        userStats[u] = { name, dept, totalMs: 0, count: 0 };
       }
       const start = new Date(item.timestamp);
       const end = new Date(item.resolvedAt);
@@ -929,7 +981,7 @@ const Dashboard = () => {
   }, [filteredData, reviewers, filters.dateEnd]);
 
   const resetFilters = () => {
-    setFilters({ dateStart: '', dateEnd: '', type: 'ALL', line: 'ALL', subLine: 'ALL', frequency: 'ALL', userFilter: '', shift: 'ALL', docNo: 'ALL', revNo: 'ALL', month: 'ALL', year: 'ALL' });
+    setFilters({ dateStart: '', dateEnd: '', type: 'ALL', line: 'ALL', subLine: 'ALL', component: 'ALL', frequency: 'ALL', userFilter: '', shift: 'ALL', docNo: 'ALL', revNo: 'ALL', month: 'ALL', year: 'ALL', status: 'ALL' });
   };
 
   return (
@@ -1051,6 +1103,17 @@ const Dashboard = () => {
               <select value={filters.component} onChange={e => setFilters({...filters, component: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
                 <option value="ALL">All Components</option>
                 {[...new Set([...rawData.map(d => d.Component), ...masterChecklists.map(c => c.Component)].filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>STATUS</label>
+              <select value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})} style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
+                <option value="ALL">All Statuses</option>
+                {[...new Set([
+                  'Done', 'WIP', 'Hold', 'Pending', 'Support Required', 'Support',
+                  ...rawData.map(d => d.Status)
+                ].filter(Boolean))].map(st => <option key={st} value={st}>{st}</option>)}
               </select>
             </div>
 
@@ -1207,7 +1270,14 @@ const Dashboard = () => {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                   <XAxis dataKey="date" fontSize={10} axisLine={false} tickLine={false} />
                   <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.08)' }} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.08)' }} 
+                    formatter={(value, name, props) => {
+                      const total = (props.payload.Done || 0) + (props.payload.WIP || 0) + (props.payload.Hold || 0) + (props.payload.Support || 0) + (props.payload.Pending || 0);
+                      const pct = total ? Math.round((value / total) * 100) : 0;
+                      return [`${value} (${pct}%)`, name];
+                    }}
+                  />
                   <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                   <Area type="monotone" dataKey="Done" stackId="1" stroke={COLORS.Done} fill="url(#colorDone)" name="Done" strokeWidth={2.5} />
                   <Area type="monotone" dataKey="WIP" stackId="1" stroke={COLORS.WIP} fill="url(#colorWIP)" name="In Progress" strokeWidth={2.5} />
@@ -1441,6 +1511,7 @@ const Dashboard = () => {
                       innerRadius={60} outerRadius={85}
                       paddingAngle={3}
                       dataKey="value"
+                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                     >
                       {fireSafetyStats.extAvailability.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
@@ -1467,6 +1538,7 @@ const Dashboard = () => {
                       innerRadius={0} outerRadius={80}
                       paddingAngle={2}
                       dataKey="value"
+                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                     >
                       {fireSafetyStats.smokeTestStatus.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
@@ -1625,7 +1697,7 @@ const Dashboard = () => {
         <div style={{ display: 'grid', gap: '1.5rem' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
             {/* Shift Performance Grid Table */}
-            <div className="card" style={{ marginBottom: 0 }}>
+            {/* <div className="card" style={{ marginBottom: 0 }}>
               <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
                 <Layers size={18} /> Shift-wise Completion Rate
               </h3>
@@ -1644,7 +1716,7 @@ const Dashboard = () => {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </div>
+            </div> */}
 
             {/* Backlog buildup accumulation */}
             <div className="card" style={{ marginBottom: 0 }}>
@@ -1786,6 +1858,7 @@ const Dashboard = () => {
                       paddingAngle={5}
                       dataKey="completed"
                       nameKey="name"
+                      label={({ name, percent }) => `${name.split(' ')[0]} (${(percent * 100).toFixed(0)}%)`}
                     >
                       {userPerformance.leaderboard.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={SHIFT_COLORS[index % SHIFT_COLORS.length]} />
@@ -2417,6 +2490,7 @@ const Dashboard = () => {
                       innerRadius={60} outerRadius={80}
                       paddingAngle={4}
                       dataKey="value"
+                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                     >
                       {reviewPerformanceStats.reviewStatusData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.name === 'Approved' ? '#10B981' : entry.name === 'Needs Correction' ? '#EF4444' : '#F59E0B'} />
@@ -2451,7 +2525,14 @@ const Dashboard = () => {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                   <XAxis dataKey="date" fontSize={10} axisLine={false} tickLine={false} />
                   <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.08)' }} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.08)' }} 
+                    formatter={(value, name, props) => {
+                      const total = (props.payload.Reviewed || 0) + (props.payload.Pending || 0);
+                      const pct = total ? Math.round((value / total) * 100) : 0;
+                      return [`${value} (${pct}%)`, name];
+                    }}
+                  />
                   <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                   <Area type="monotone" dataKey="Reviewed" stackId="review" stroke="#10B981" fill="url(#colorReviewed)" name="Reviewed Tasks" strokeWidth={2.5} />
                   <Area type="monotone" dataKey="Pending" stackId="review" stroke="#F59E0B" fill="url(#colorPendingReview)" name="Unreviewed/Pending" strokeWidth={2.5} />

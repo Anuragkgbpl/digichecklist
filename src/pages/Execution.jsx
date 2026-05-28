@@ -444,7 +444,7 @@ const Execution = () => {
           Document_Number: c.Document_Number || '-',
           Revision: c.Revision || '-',
           Last_Revised_Date: c.Last_Revised_Date || '-',
-          Submitted_By: (user?.name || '') + ' (' + (user?.id || '') + ')',
+          Submitted_By: employeeRecord ? `${employeeRecord.Employee_Name} (${employeeRecord.Employee_ID})` : ((user?.name || '') + ' (' + (user?.id || '') + ')'),
           Submitted_By_ID: user?.id || '',
           Date_Timestamp: now.toISOString(),
           Shift: currentShiftId
@@ -469,7 +469,7 @@ const Execution = () => {
         photo: photos[c.id] || null,
         department: supportDetails[c.id]?.dept || '',
         assignedTo: supportDetails[c.id]?.assignedTo || '',
-        submittedBy: (user?.name || '') + ' (' + (user?.id || '') + ')',
+        submittedBy: employeeRecord ? `${employeeRecord.Employee_Name} (${employeeRecord.Employee_ID})` : ((user?.name || '') + ' (' + (user?.id || '') + ')'),
         submittedById: user?.id || '',
         timestamp: now.toISOString()
       }));
