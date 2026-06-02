@@ -454,7 +454,7 @@ export default function ReviewersMaster() {
                   {filteredEmployees.length > 0 ? (
                     filteredEmployees.map(emp => (
                       <div 
-                        key={emp.Employee_ID} 
+                        key={emp._fbKey || `${emp.Employee_ID}-${emp.Employee_Name}`} 
                         onClick={() => handleAddReviewer(emp.Employee_ID)}
                         style={{ padding: '0.75rem', cursor: 'pointer', borderBottom: '1px solid #F1F5F9', fontSize: '0.875rem' }}
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F8FAFC'}

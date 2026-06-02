@@ -78,7 +78,12 @@ const AutoCompleteEmployee = ({ employees, value, onChange, placeholder = "Searc
       <input 
         type="text" 
         value={query} 
-        onChange={e => { setQuery(e.target.value); setIsOpen(true); }}
+        onChange={e => { 
+          const val = e.target.value;
+          setQuery(val); 
+          onChange(val);
+          setIsOpen(true); 
+        }}
         onFocus={() => setIsOpen(true)}
         placeholder={placeholder}
         style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '6px', border: '1px solid #FCA5A5', fontSize: '0.8rem', color: '#991B1B', outline: 'none', boxSizing: 'border-box' }}
@@ -89,7 +94,7 @@ const AutoCompleteEmployee = ({ employees, value, onChange, placeholder = "Searc
             <div style={{ padding: '0.5rem', fontSize: '0.75rem', color: '#94A3B8' }}>No matches</div>
           ) : filtered.map(e => (
             <div 
-              key={e.Employee_ID} 
+              key={e._fbKey || `${e.Employee_ID}-${e.Employee_Name}`} 
               style={{ padding: '0.5rem', fontSize: '0.75rem', cursor: 'pointer', borderBottom: '1px solid #F1F5F9' }}
               onClick={() => { onChange(e.Employee_Name); setQuery(e.Employee_Name); setIsOpen(false); }}
               onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F8FAFC'}
