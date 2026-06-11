@@ -203,7 +203,7 @@ const Execution = () => {
   useEffect(() => {
     if (dataLoading) return;
     if (!cloudChecklists) return;
-    let accessible = cloudChecklists;
+    let accessible = cloudChecklists.filter(c => c.Status !== 'Inactive');
     
     // 1. Role-based filtering
     // Only apply access filter for regular users. Admins see everything.
