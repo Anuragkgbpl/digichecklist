@@ -207,7 +207,9 @@ const Dashboard = () => {
     const categoryCompliance = Object.entries(categoryMap).map(([name, stat]) => ({
       name,
       Compliance: Math.round((stat.ok / stat.total) * 100),
-      Total: stat.total
+      Total: stat.total,
+      ok: stat.ok,
+      notOk: stat.total - stat.ok
     })).sort((a, b) => b.Compliance - a.Compliance);
 
     const referenceDate = filters.dateEnd ? new Date(filters.dateEnd) : new Date();
@@ -303,33 +305,7 @@ const Dashboard = () => {
       .sort((a, b) => b.failures - a.failures)
       .slice(0, 6);
       
-    const extDataLogs = data.filter(d => d.Equipment_Category === 'Fire Extinguisher');
-    const latestExtDate = extDataLogs.length > 0 ? extDataLogs.reduce((max, r) => r.Date > max ? r.Date : max, extDataLogs[0].Date) : null;
-    let extGood = 0, extDamaged = 0, extExpired = 0;
-    if (latestExtDate) {
-      extDataLogs.filter(r => r.Date === latestExtDate).forEach(d => {
-        if (d.extStatus === 'Good') extGood++;
-        else if (d.extStatus === 'Damaged') extDamaged++;
-        else if (d.extStatus === 'Expired') extExpired++;
-        else if (d.Status === 'OK') extGood++;
-        else extDamaged++;
-      });
-    }
-    const extAvailability = [
-      { name: 'Fully Functional (Good)', value: extGood, color: '#10B981' },
-      { name: 'Physical Damage (Repairs)', value: extDamaged, color: '#F59E0B' },
-      { name: 'Hydrotest Expired', value: extExpired, color: '#EF4444' }
-    ];
-    
-    const smokeLogsAll = data.filter(d => d.Equipment_Category === 'Smoke Detector');
-    const latestSmokeDate = smokeLogsAll.length > 0 ? smokeLogsAll.reduce((max, r) => r.Date > max ? r.Date : max, smokeLogsAll[0].Date) : null;
-    const smokeLogs = latestSmokeDate ? smokeLogsAll.filter(d => d.Date === latestSmokeDate) : [];
-    const smokeOk = smokeLogs.filter(d => d.Status === 'OK' || d.Status === 'Done').length;
-    const smokeNotOk = smokeLogs.filter(d => d.Status === 'Not OK' || d.Status === 'Support Required' || d.Status === 'Support').length;
-    const smokeTestStatus = [
-      { name: 'Active & Responsive', value: smokeOk, color: '#10B981' },
-      { name: 'Faulty / Non-Responsive', value: smokeNotOk, color: '#EF4444' }
-    ];
+
     
     const safetyTickets = supportInbox.filter(t => t.Type_of_Activity === 'Fire Safety');
     const deptTicketMap = {};
@@ -1496,68 +1472,44 @@ const Dashboard = () => {
           </div>
 
           {/* Row 4: Specific Equipment & Tickets */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
-            {/* Widget 11: Fire Extinguisher Expiry / Capacity Availability */}
-            <div className="card" style={{ padding: '1.5rem', marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                <Shield size={18} color="#EA580C" /> Extinguisher Capacity & Status
-              </h3>
-              <div style={{ height: '220px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                {fireSafetyStats.extAvailability.some(e => e.value > 0) ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={fireSafetyStats.extAvailability}
-                        cx="50%" cy="50%"
-                        innerRadius={60} outerRadius={85}
-                        paddingAngle={3}
-                        dataKey="value"
-                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                      >
-                        {fireSafetyStats.extAvailability.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '10px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>No recent data available</div>
-                )}
-              </div>
-            </div>
-
-            {/* Widget 12: Smoke Detector Test Status */}
-            <div className="card" style={{ padding: '1.5rem', marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                <Activity size={18} color="#EF4444" /> Smoke Detector Functional checks
-              </h3>
-              <div style={{ height: '220px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                {fireSafetyStats.smokeTestStatus.some(e => e.value > 0) ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={fireSafetyStats.smokeTestStatus}
-                        cx="50%" cy="50%"
-                        innerRadius={0} outerRadius={80}
-                        paddingAngle={2}
-                        dataKey="value"
-                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                      >
-                        {fireSafetyStats.smokeTestStatus.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '10px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>No recent data available</div>
-                )}
-              </div>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+            {fireSafetyStats.categoryCompliance.map((cat, idx) => {
+              const pieData = [
+                { name: 'Functional (OK)', value: cat.ok, color: '#10B981' },
+                { name: 'Requires Support', value: cat.notOk, color: '#EF4444' }
+              ];
+              return (
+                <div key={idx} className="card" style={{ padding: '1.5rem', marginBottom: 0 }}>
+                  <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
+                    <Shield size={18} color="#3B82F6" /> {cat.name} Status
+                  </h3>
+                  <div style={{ height: '220px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    {(cat.ok > 0 || cat.notOk > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={pieData}
+                            cx="50%" cy="50%"
+                            innerRadius={60} outerRadius={85}
+                            paddingAngle={3}
+                            dataKey="value"
+                            label={({ name, percent }) => percent > 0 ? `${name} (${(percent * 100).toFixed(0)}%)` : ''}
+                          >
+                            {pieData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '10px' }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>No data</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
 
             {/* Widget 6: Compliance Rate by Frequency */}
             <div className="card" style={{ padding: '1.5rem', marginBottom: 0 }}>
