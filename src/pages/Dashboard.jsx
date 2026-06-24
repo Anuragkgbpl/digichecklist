@@ -403,8 +403,6 @@ const Dashboard = () => {
       lineCompliance,
       criticalAssets,
       topCategories,
-      extAvailability,
-      smokeTestStatus,
       ticketsByDepartment,
       auditReadinessScore,
       operatorLeaderboard,
