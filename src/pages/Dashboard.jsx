@@ -303,25 +303,27 @@ const Dashboard = () => {
       .sort((a, b) => b.failures - a.failures)
       .slice(0, 6);
       
-    const latestDate = data.length > 0 ? data.reduce((max, r) => r.Date > max ? r.Date : max, data[0].Date) : getLocalDateStr(new Date());
-    
+    const extDataLogs = data.filter(d => d.Equipment_Category === 'Fire Extinguisher');
+    const latestExtDate = extDataLogs.length > 0 ? extDataLogs.reduce((max, r) => r.Date > max ? r.Date : max, extDataLogs[0].Date) : null;
     let extGood = 0, extDamaged = 0, extExpired = 0;
-    data.filter(r => r.Date === latestDate).forEach(d => {
-      if (d.Equipment_Category === 'Fire Extinguisher') {
+    if (latestExtDate) {
+      extDataLogs.filter(r => r.Date === latestExtDate).forEach(d => {
         if (d.extStatus === 'Good') extGood++;
         else if (d.extStatus === 'Damaged') extDamaged++;
         else if (d.extStatus === 'Expired') extExpired++;
         else if (d.Status === 'OK') extGood++;
         else extDamaged++;
-      }
-    });
+      });
+    }
     const extAvailability = [
       { name: 'Fully Functional (Good)', value: extGood, color: '#10B981' },
       { name: 'Physical Damage (Repairs)', value: extDamaged, color: '#F59E0B' },
       { name: 'Hydrotest Expired', value: extExpired, color: '#EF4444' }
     ];
     
-    const smokeLogs = data.filter(d => d.Equipment_Category === 'Smoke Detector' && d.Date === latestDate);
+    const smokeLogsAll = data.filter(d => d.Equipment_Category === 'Smoke Detector');
+    const latestSmokeDate = smokeLogsAll.length > 0 ? smokeLogsAll.reduce((max, r) => r.Date > max ? r.Date : max, smokeLogsAll[0].Date) : null;
+    const smokeLogs = latestSmokeDate ? smokeLogsAll.filter(d => d.Date === latestSmokeDate) : [];
     const smokeOk = smokeLogs.filter(d => d.Status === 'OK' || d.Status === 'Done').length;
     const smokeNotOk = smokeLogs.filter(d => d.Status === 'Not OK' || d.Status === 'Support Required' || d.Status === 'Support').length;
     const smokeTestStatus = [
@@ -1501,24 +1503,28 @@ const Dashboard = () => {
                 <Shield size={18} color="#EA580C" /> Extinguisher Capacity & Status
               </h3>
               <div style={{ height: '220px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={fireSafetyStats.extAvailability}
-                      cx="50%" cy="50%"
-                      innerRadius={60} outerRadius={85}
-                      paddingAngle={3}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                    >
-                      {fireSafetyStats.extAvailability.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '10px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
+                {fireSafetyStats.extAvailability.some(e => e.value > 0) ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={fireSafetyStats.extAvailability}
+                        cx="50%" cy="50%"
+                        innerRadius={60} outerRadius={85}
+                        paddingAngle={3}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                      >
+                        {fireSafetyStats.extAvailability.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '10px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>No recent data available</div>
+                )}
               </div>
             </div>
 
@@ -1528,24 +1534,28 @@ const Dashboard = () => {
                 <Activity size={18} color="#EF4444" /> Smoke Detector Functional checks
               </h3>
               <div style={{ height: '220px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={fireSafetyStats.smokeTestStatus}
-                      cx="50%" cy="50%"
-                      innerRadius={0} outerRadius={80}
-                      paddingAngle={2}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                    >
-                      {fireSafetyStats.smokeTestStatus.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '10px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
+                {fireSafetyStats.smokeTestStatus.some(e => e.value > 0) ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={fireSafetyStats.smokeTestStatus}
+                        cx="50%" cy="50%"
+                        innerRadius={0} outerRadius={80}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                      >
+                        {fireSafetyStats.smokeTestStatus.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '10px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>No recent data available</div>
+                )}
               </div>
             </div>
 
@@ -1600,18 +1610,22 @@ const Dashboard = () => {
                 <AlertTriangle size={18} color="#EF4444" /> Sticky Safety Issue Backlog
               </h3>
               <div style={{ height: '220px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={fireSafetyStats.alertsAgeBacklog} margin={{ left: -15, right: 10, top: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                    <XAxis dataKey="name" fontSize={9} axisLine={false} tickLine={false} />
-                    <YAxis fontSize={9} axisLine={false} tickLine={false} />
-                    <Tooltip />
-                    <Legend wrapperStyle={{ fontSize: '9px' }} />
-                    <Bar dataKey="Medium" stackId="alerts" fill="#F59E0B" name="Medium Risk" />
-                    <Bar dataKey="High" stackId="alerts" fill="#EA580C" name="High Risk" />
-                    <Bar dataKey="Critical" stackId="alerts" fill="#EF4444" name="Critical Risk" />
-                  </BarChart>
-                </ResponsiveContainer>
+                {fireSafetyStats.alertsAgeBacklog.some(a => a.Critical > 0 || a.High > 0 || a.Medium > 0) ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={fireSafetyStats.alertsAgeBacklog} margin={{ left: -15, right: 10, top: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                      <XAxis dataKey="name" fontSize={9} axisLine={false} tickLine={false} />
+                      <YAxis fontSize={9} axisLine={false} tickLine={false} />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: '9px' }} />
+                      <Bar dataKey="Medium" stackId="alerts" fill="#F59E0B" name="Medium Risk" />
+                      <Bar dataKey="High" stackId="alerts" fill="#EA580C" name="High Risk" />
+                      <Bar dataKey="Critical" stackId="alerts" fill="#EF4444" name="Critical Risk" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>No pending safety issues</div>
+                )}
               </div>
             </div>
 
