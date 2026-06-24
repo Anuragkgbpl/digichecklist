@@ -600,12 +600,27 @@ const Execution = () => {
       )}
 
       {submitSuccess && (
-        <div style={{ backgroundColor: '#ECFDF5', border: '1px solid #6EE7B7', borderRadius: 'var(--border-radius-md)', padding: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <CheckCircle size={20} color="#059669" />
-          <div>
-            <div style={{ fontWeight: 600, color: '#065F46' }}>Records submitted successfully!</div>
-            {supportCount > 0 && <div style={{ fontSize: '0.875rem', color: '#047857' }}>{supportCount} support request{supportCount > 1 ? 's' : ''} raised in the Support Inbox.</div>}
+        <div style={{ backgroundColor: '#ECFDF5', border: '1px solid #6EE7B7', borderRadius: 'var(--border-radius-md)', padding: '1rem', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <CheckCircle size={20} color="#059669" />
+            <div>
+              <div style={{ fontWeight: 600, color: '#065F46' }}>Records submitted successfully!</div>
+              {supportCount > 0 && <div style={{ fontSize: '0.875rem', color: '#047857' }}>{supportCount} support request{supportCount > 1 ? 's' : ''} raised in the Support Inbox.</div>}
+            </div>
           </div>
+          <button className="btn btn-primary" style={{ alignSelf: 'flex-start', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }} onClick={() => {
+            const params = new URLSearchParams();
+            if (urlActivityType) params.set('activityType', urlActivityType);
+            if (urlLine) params.set('line', urlLine);
+            if (urlSubLine) params.set('subLine', urlSubLine);
+            if (urlArea) params.set('area', urlArea);
+            if (urlCategory) params.set('category', urlCategory);
+            if (urlAssetId) params.set('assetId', urlAssetId);
+            params.set('step', urlActivityType?.trim().toLowerCase() === 'fire safety' ? '6' : '3');
+            navigate(`/user/scan-select?${params.toString()}`);
+          }}>
+            ← Back to Component Selection
+          </button>
         </div>
       )}
 

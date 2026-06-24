@@ -161,9 +161,7 @@ const Dashboard = () => {
 
   // Fire Safety data: blend real Firebase FS submissions + stable module-level mock data
   const fireSafetySubmissions = useMemo(() => {
-    const actualFS = rawData.filter(r => r.Type_of_Activity === 'Fire Safety');
-    const mockFS   = generateFireSafetyMockData();
-    return [...actualFS, ...mockFS];
+    return rawData.filter(r => r.Type_of_Activity === 'Fire Safety');
   }, [rawData]);
 
 
@@ -199,6 +197,19 @@ const Dashboard = () => {
     const notOkCount = data.filter(d => d.Status === 'Not OK' || d.Status === 'Support Required' || d.Status === 'Support').length;
     const complianceRate = totalCheckpoints ? Math.round((okCount / totalCheckpoints) * 100) : 100;
     
+    const categoryMap = {};
+    data.forEach(r => {
+      const cat = r.Equipment_Category || 'Unknown';
+      if (!categoryMap[cat]) categoryMap[cat] = { total: 0, ok: 0 };
+      categoryMap[cat].total++;
+      if (r.Status === 'OK' || r.Status === 'Done') categoryMap[cat].ok++;
+    });
+    const categoryCompliance = Object.entries(categoryMap).map(([name, stat]) => ({
+      name,
+      Compliance: Math.round((stat.ok / stat.total) * 100),
+      Total: stat.total
+    })).sort((a, b) => b.Compliance - a.Compliance);
+
     const referenceDate = filters.dateEnd ? new Date(filters.dateEnd) : new Date();
     const dates7 = [];
     for (let i = 6; i >= 0; i--) {
@@ -207,12 +218,18 @@ const Dashboard = () => {
       dates7.push(getLocalDateStr(d));
     }
     
+    const topCategories = categoryCompliance.slice(0, 5).map(c => c.name);
+    
     const complianceTrend = dates7.map(date => {
       const dayLogs = data.filter(r => r.Date === date);
-      const total = dayLogs.length;
-      const ok = dayLogs.filter(d => d.Status === 'OK' || d.Status === 'Done').length;
-      const rate = total ? Math.round((ok / total) * 100) : 100;
-      return { date, Compliance: rate, Total: total };
+      const res = { date };
+      topCategories.forEach(cat => {
+        const catLogs = dayLogs.filter(r => r.Equipment_Category === cat);
+        const total = catLogs.length;
+        const ok = catLogs.filter(d => d.Status === 'OK' || d.Status === 'Done').length;
+        res[cat] = total ? Math.round((ok / total) * 100) : null;
+      });
+      return res;
     });
     
     const dates10 = [];
@@ -236,19 +253,6 @@ const Dashboard = () => {
       if (r.Status === 'OK' || r.Status === 'Done') areaMap[area].ok++;
     });
     const areaCompliance = Object.entries(areaMap).map(([name, stat]) => ({
-      name,
-      Compliance: Math.round((stat.ok / stat.total) * 100),
-      Total: stat.total
-    })).sort((a, b) => b.Compliance - a.Compliance);
-    
-    const categoryMap = {};
-    data.forEach(r => {
-      const cat = r.Equipment_Category || 'Unknown';
-      if (!categoryMap[cat]) categoryMap[cat] = { total: 0, ok: 0 };
-      categoryMap[cat].total++;
-      if (r.Status === 'OK' || r.Status === 'Done') categoryMap[cat].ok++;
-    });
-    const categoryCompliance = Object.entries(categoryMap).map(([name, stat]) => ({
       name,
       Compliance: Math.round((stat.ok / stat.total) * 100),
       Total: stat.total
@@ -299,17 +303,10 @@ const Dashboard = () => {
       .sort((a, b) => b.failures - a.failures)
       .slice(0, 6);
       
-    const hydrantData = data
-      .filter(d => d.Equipment_Category === 'Fire Hydrant' && d.pressureReading !== undefined)
-      .sort((a, b) => new Date(a.Date_Timestamp || a.Date) - new Date(b.Date_Timestamp || b.Date));
-    const pressureTrend = hydrantData.slice(-15).map(d => ({
-      time: d.Date.split('-').slice(1).join('/'),
-      pressure: d.pressureReading,
-      assetId: d.Asset_ID
-    }));
+    const latestDate = data.length > 0 ? data.reduce((max, r) => r.Date > max ? r.Date : max, data[0].Date) : getLocalDateStr(new Date());
     
     let extGood = 0, extDamaged = 0, extExpired = 0;
-    data.forEach(d => {
+    data.filter(r => r.Date === latestDate).forEach(d => {
       if (d.Equipment_Category === 'Fire Extinguisher') {
         if (d.extStatus === 'Good') extGood++;
         else if (d.extStatus === 'Damaged') extDamaged++;
@@ -318,36 +315,41 @@ const Dashboard = () => {
         else extDamaged++;
       }
     });
-    if (extGood === 0 && extDamaged === 0 && extExpired === 0) {
-      extGood = 124; extDamaged = 8; extExpired = 3;
-    }
     const extAvailability = [
       { name: 'Fully Functional (Good)', value: extGood, color: '#10B981' },
       { name: 'Physical Damage (Repairs)', value: extDamaged, color: '#F59E0B' },
       { name: 'Hydrotest Expired', value: extExpired, color: '#EF4444' }
     ];
     
-    const smokeLogs = data.filter(d => d.Equipment_Category === 'Smoke Detector');
+    const smokeLogs = data.filter(d => d.Equipment_Category === 'Smoke Detector' && d.Date === latestDate);
     const smokeOk = smokeLogs.filter(d => d.Status === 'OK' || d.Status === 'Done').length;
     const smokeNotOk = smokeLogs.filter(d => d.Status === 'Not OK' || d.Status === 'Support Required' || d.Status === 'Support').length;
     const smokeTestStatus = [
-      { name: 'Active & Responsive', value: smokeOk || 35, color: '#10B981' },
-      { name: 'Faulty / Non-Responsive', value: smokeNotOk || 6, color: '#EF4444' }
+      { name: 'Active & Responsive', value: smokeOk, color: '#10B981' },
+      { name: 'Faulty / Non-Responsive', value: smokeNotOk, color: '#EF4444' }
     ];
     
     const safetyTickets = supportInbox.filter(t => t.Type_of_Activity === 'Fire Safety');
     const deptTicketMap = {};
     safetyTickets.forEach(t => {
       const dept = t.department || t.SupportDept || 'Safety Department';
-      deptTicketMap[dept] = (deptTicketMap[dept] || 0) + 1;
+      const cat = t.Equipment_Category || t.category || 'General';
+      const key = `${dept}|${cat}`;
+      if (!deptTicketMap[key]) deptTicketMap[key] = { department: dept, category: cat, total: 0, tatSum: 0, closedCount: 0 };
+      deptTicketMap[key].total++;
+      if (t.status === 'Closed' && t.resolveDate && t.timestamp) {
+        const resolveTime = new Date(t.resolveDate);
+        const openTime = new Date(t.timestamp);
+        const hrs = (resolveTime - openTime) / (1000 * 60 * 60);
+        deptTicketMap[key].tatSum += hrs;
+        deptTicketMap[key].closedCount++;
+      }
     });
-    const defaultDepts = { 'Safety Department': 15, 'Electrical Dept': 8, 'Utility Mechanical': 10, 'Civil Maintenance': 4 };
-    Object.entries(defaultDepts).forEach(([dept, count]) => {
-      deptTicketMap[dept] = (deptTicketMap[dept] || 0) + count;
-    });
-    const ticketsByDepartment = Object.entries(deptTicketMap).map(([name, count]) => ({
-      name,
-      Tickets: count
+    const ticketsByDepartment = Object.values(deptTicketMap).map(v => ({
+      department: v.department,
+      category: v.category,
+      Tickets: v.total,
+      closureTAT: v.closedCount > 0 ? (v.tatSum / v.closedCount).toFixed(1) + ' hrs' : 'N/A'
     })).sort((a,b) => b.Tickets - a.Tickets);
 
     const checkedWithPhoto = data.filter(d => d.photoAttached === 'yes').length;
@@ -376,11 +378,34 @@ const Dashboard = () => {
       .sort((a, b) => b.completed - a.completed)
       .slice(0, 5);
       
-    const openTicketsCount = supportInbox.filter(t => t.Type_of_Activity === 'Fire Safety' && (t.status === 'Open' || t.status === 'Pending')).length;
+    const openSafetyTickets = supportInbox.filter(t => t.Type_of_Activity === 'Fire Safety' && (t.status === 'Open' || t.status === 'Pending'));
+    let activeCrit = 0, activeHigh = 0, activeMed = 0;
+    let warnCrit = 0, warnHigh = 0, warnMed = 0;
+    let stickyCrit = 0, stickyHigh = 0, stickyMed = 0;
+    const now = new Date();
+    
+    openSafetyTickets.forEach(t => {
+      const ageDays = t.timestamp ? (now - new Date(t.timestamp)) / (1000 * 60 * 60 * 24) : 0;
+      const risk = t.Priority || 'Medium';
+      if (ageDays <= 3) {
+        if (risk === 'Critical') activeCrit++;
+        else if (risk === 'High') activeHigh++;
+        else activeMed++;
+      } else if (ageDays <= 7) {
+        if (risk === 'Critical') warnCrit++;
+        else if (risk === 'High') warnHigh++;
+        else warnMed++;
+      } else {
+        if (risk === 'Critical') stickyCrit++;
+        else if (risk === 'High') stickyHigh++;
+        else stickyMed++;
+      }
+    });
+
     const alertsAgeBacklog = [
-      { name: '0-3 Days (Active)', Critical: 2, High: 3, Medium: 4 },
-      { name: '4-7 Days (Warning)', Critical: 1, High: 2, Medium: 3 },
-      { name: ' >7 Days (Sticky)', Critical: Math.max(0, openTicketsCount - 8) || 1, High: 1, Medium: 2 }
+      { name: '0-3 Days (Active)', Critical: activeCrit, High: activeHigh, Medium: activeMed },
+      { name: '4-7 Days (Warning)', Critical: warnCrit, High: warnHigh, Medium: warnMed },
+      { name: ' >7 Days (Sticky)', Critical: stickyCrit, High: stickyHigh, Medium: stickyMed }
     ];
     
     const totalAssets = Object.keys(assetMap).length || 45;
@@ -399,7 +424,7 @@ const Dashboard = () => {
       frequencyCompliance,
       lineCompliance,
       criticalAssets,
-      pressureTrend,
+      topCategories,
       extAvailability,
       smokeTestStatus,
       ticketsByDepartment,
@@ -1368,19 +1393,16 @@ const Dashboard = () => {
               </h3>
               <div style={{ height: '280px' }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={fireSafetyStats.complianceTrend} margin={{ left: -15, right: 10, top: 10 }}>
-                    <defs>
-                      <linearGradient id="colorFSACompliance" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor="#10B981" stopOpacity={0.0}/>
-                      </linearGradient>
-                    </defs>
+                  <LineChart data={fireSafetyStats.complianceTrend} margin={{ left: -15, right: 10, top: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                     <XAxis dataKey="date" fontSize={9} axisLine={false} tickLine={false} />
                     <YAxis fontSize={9} axisLine={false} tickLine={false} unit="%" domain={[0, 100]} />
                     <Tooltip />
-                    <Area type="monotone" dataKey="Compliance" stroke="#10B981" fill="url(#colorFSACompliance)" name="Compliance Rate" strokeWidth={2.5} />
-                  </AreaChart>
+                    <Legend wrapperStyle={{ fontSize: '10px' }} />
+                    {fireSafetyStats.topCategories.map((cat, i) => (
+                      <Line key={cat} type="monotone" dataKey={cat} stroke={['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6'][i % 5]} name={cat} strokeWidth={2.5} dot={{ r: 3 }} />
+                    ))}
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
@@ -1401,30 +1423,6 @@ const Dashboard = () => {
                     <Line type="monotone" dataKey="OK" stroke="#10B981" strokeWidth={2.5} dot={{ r: 3 }} name="OK Inspections" />
                     <Line type="monotone" dataKey="Not OK" stroke="#EF4444" strokeWidth={2.5} dot={{ r: 3 }} name="Not OK Inspections" />
                   </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Widget 10: Fire Hydrant Pressure Reading Trend */}
-            <div className="card" style={{ padding: '1.5rem', marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                <Clock size={18} color="#2563EB" /> Hydrant Header Pressure readings (kg/cm²)
-              </h3>
-              <div style={{ height: '280px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={fireSafetyStats.pressureTrend} margin={{ left: -15, right: 10, top: 10 }}>
-                    <defs>
-                      <linearGradient id="colorFSPressure" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#2563EB" stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor="#2563EB" stopOpacity={0.0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                    <XAxis dataKey="time" fontSize={9} axisLine={false} tickLine={false} />
-                    <YAxis fontSize={9} axisLine={false} tickLine={false} domain={[0, 10]} />
-                    <Tooltip formatter={(value, name, props) => [`${value} kg/cm²`, `${props.payload.assetId}`]} />
-                    <Area type="monotone" dataKey="pressure" stroke="#2563EB" fill="url(#colorFSPressure)" name="Hydrant Pressure" strokeWidth={2.5} />
-                  </AreaChart>
                 </ResponsiveContainer>
               </div>
             </div>
@@ -1622,16 +1620,30 @@ const Dashboard = () => {
               <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
                 <Clock size={18} /> Support Tickets Raised by Dept
               </h3>
-              <div style={{ height: '220px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={fireSafetyStats.ticketsByDepartment} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
-                    <XAxis type="number" fontSize={9} axisLine={false} tickLine={false} />
-                    <YAxis dataKey="name" type="category" fontSize={8} axisLine={false} tickLine={false} width={80} />
-                    <Tooltip />
-                    <Bar dataKey="Tickets" fill="#EF4444" radius={[0, 4, 4, 0]} barSize={12} name="Open/Active Tickets" />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="table-container-responsive" style={{ maxHeight: '220px', overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '2px solid #E2E8F0' }}>
+                      <th style={{ padding: '0.8rem 1rem' }}>Department</th>
+                      <th style={{ padding: '0.8rem 1rem' }}>Category</th>
+                      <th style={{ padding: '0.8rem 1rem', textAlign: 'center' }}>Total Tickets</th>
+                      <th style={{ padding: '0.8rem 1rem', textAlign: 'center' }}>Closure TAT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fireSafetyStats.ticketsByDepartment.map((t, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #E2E8F0' }}>
+                        <td style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>{t.department}</td>
+                        <td style={{ padding: '0.8rem 1rem', color: 'var(--text-secondary)' }}>{t.category}</td>
+                        <td style={{ padding: '0.8rem 1rem', textAlign: 'center', fontWeight: 700, color: '#EF4444' }}>{t.Tickets}</td>
+                        <td style={{ padding: '0.8rem 1rem', textAlign: 'center', color: 'var(--text-secondary)' }}>{t.closureTAT}</td>
+                      </tr>
+                    ))}
+                    {fireSafetyStats.ticketsByDepartment.length === 0 && (
+                      <tr><td colSpan="4" style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-tertiary)' }}>No tickets found</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

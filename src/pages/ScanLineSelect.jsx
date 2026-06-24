@@ -12,18 +12,29 @@ const ScanLineSelect = () => {
   const queryParams = new URLSearchParams(location.search);
   const activityType = queryParams.get('activityType') || '';
   const preSelectedLine = queryParams.get('line') || '';
+  const preSelectedSubLine = queryParams.get('subLine') || '';
+  const preSelectedArea = queryParams.get('area') || '';
+  const preSelectedCategory = queryParams.get('category') || '';
+  const preSelectedAssetId = queryParams.get('assetId') || '';
+  const initialStepStr = queryParams.get('step');
 
   const isFireSafety = activityType.trim().toLowerCase() === 'fire safety';
   const steps = isFireSafety 
     ? ['Line', 'Sub-Line', 'Area', 'Category', 'Asset ID', 'Component']
     : ['Line', 'Sub-Line', 'Component'];
 
-  const [step, setStep] = useState(preSelectedLine ? 2 : 1);
+  const getInitialStep = () => {
+    if (initialStepStr) return parseInt(initialStepStr, 10);
+    if (preSelectedLine) return 2;
+    return 1;
+  };
+
+  const [step, setStep] = useState(getInitialStep());
   const [selectedLine, setSelectedLine] = useState(preSelectedLine);
-  const [selectedSubLine, setSelectedSubLine] = useState('');
-  const [selectedArea, setSelectedArea] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedAssetId, setSelectedAssetId] = useState('');
+  const [selectedSubLine, setSelectedSubLine] = useState(preSelectedSubLine);
+  const [selectedArea, setSelectedArea] = useState(preSelectedArea);
+  const [selectedCategory, setSelectedCategory] = useState(preSelectedCategory);
+  const [selectedAssetId, setSelectedAssetId] = useState(preSelectedAssetId);
   const [selectedComponent, setSelectedComponent] = useState('');
 
   const [lines, setLines] = useState([]);
