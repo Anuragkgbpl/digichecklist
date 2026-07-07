@@ -14,6 +14,7 @@ import ScanRedirect from './pages/ScanRedirect';
 import ScanLineSelect from './pages/ScanLineSelect';
 import QRScanLanding from './pages/QRScanLanding';
 import Dashboard from './pages/Dashboard';
+import KoreModuleViewer from './pages/KoreModuleViewer';
 import { DataProvider } from './context/DataContext';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -71,6 +72,8 @@ function AppRoutes() {
         {/* QR Scan flow - inside layout */}
         <Route path="user/scan-select" element={<ScanLineSelect />} />
         <Route path="user/execute" element={<Execution />} />
+        <Route path="user/kore-modules" element={<KoreModuleViewer />} />
+        <Route path="kore-modules-viewer" element={<KoreModuleViewer />} />
         
         {/* Common Routes */}
         <Route path="logs" element={

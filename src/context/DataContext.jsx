@@ -25,6 +25,7 @@ export const DataProvider = ({ children }) => {
   const [shifts, setShifts] = useState([]);
   const [frequencies, setFrequencies] = useState([]);
   const [reviewers, setReviewers] = useState([]);
+  const [koreModules, setKoreModules] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -78,6 +79,11 @@ export const DataProvider = ({ children }) => {
       setReviewers(mapFirebaseValues(val));
     });
 
+    // 11. Sync Kore Modules
+    const unsubKore = syncData('kore_modules', (val) => {
+      setKoreModules(mapFirebaseValues(val));
+    });
+
     setLoading(false);
 
     return () => {
@@ -91,6 +97,7 @@ export const DataProvider = ({ children }) => {
       unsubShifts();
       unsubFreqs();
       unsubReviewers();
+      unsubKore();
     };
   }, []);
 
@@ -117,7 +124,7 @@ export const DataProvider = ({ children }) => {
 
   return (
     <DataContext.Provider value={{ 
-      employees, checklists, units, submissions, supportInbox, logs, activities, shifts, frequencies, reviewers,
+      employees, checklists, units, submissions, supportInbox, logs, activities, shifts, frequencies, reviewers, koreModules,
       updateFirebase, patchFirebase, appendFirebase, loading 
     }}>
       {children}

@@ -1,14 +1,19 @@
 import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { ClipboardList, Inbox, LayoutDashboard, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const QRBottomNav = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const scanLevel = localStorage.getItem('qr_scan_level');
   const scanName = localStorage.getItem('qr_scan_name');
+
+  if (location.pathname.includes('kore-modules') || scanLevel === 'koremodule' || scanLevel === 'kore') {
+    return null;
+  }
 
   const handleLogout = () => {
     localStorage.removeItem('qr_mode');

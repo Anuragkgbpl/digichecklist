@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { User, QrCode, ClipboardList, Inbox, LayoutDashboard, AlertCircle, PlayCircle, Loader2 } from 'lucide-react';
+import { User, QrCode, ClipboardList, Inbox, LayoutDashboard, AlertCircle, PlayCircle, Loader2, BookOpen } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 
@@ -59,6 +59,16 @@ const QRScanLanding = () => {
       localStorage.setItem('qr_mode', 'true');
       localStorage.setItem('qr_scan_level', level);
       localStorage.setItem('qr_scan_name', name);
+
+      if (level === 'koremodule' || level === 'kore') {
+        if (name && name !== 'all') {
+          navigate(`/user/kore-modules?selected=${encodeURIComponent(name)}`);
+        } else {
+          navigate(`/user/kore-modules`);
+        }
+        return;
+      }
+
       setIsAuthenticated(true);
       setIsProcessing(false);
     }, 1500); // 1.5 seconds simulated delay
@@ -67,6 +77,12 @@ const QRScanLanding = () => {
   const navigateToUpdateChecklist = () => {
     if (level === 'activitytype') {
       navigate(`/user/scan-select?activityType=${encodeURIComponent(name)}`);
+    } else if (level === 'koremodule' || level === 'kore') {
+      if (name && name !== 'all') {
+        navigate(`/user/kore-modules?selected=${encodeURIComponent(name)}`);
+      } else {
+        navigate(`/user/kore-modules`);
+      }
     } else {
       navigate(`/user/execute?scanLevel=${encodeURIComponent(level)}&scanName=${encodeURIComponent(name)}`);
     }
@@ -91,10 +107,18 @@ const QRScanLanding = () => {
               onMouseOver={e => e.currentTarget.style.borderColor = '#10B981'}
               onMouseOut={e => e.currentTarget.style.borderColor = '#E2E8F0'}
             >
-              <div style={{ backgroundColor: '#ECFDF5', padding: '1rem', borderRadius: '0.75rem' }}><ClipboardList size={28} color="#059669" /></div>
+              <div style={{ backgroundColor: '#ECFDF5', padding: '1rem', borderRadius: '0.75rem' }}>
+                {(level === 'koremodule' || level === 'kore') ? <BookOpen size={28} color="#059669" /> : <ClipboardList size={28} color="#059669" />}
+              </div>
               <div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0F172A', marginBottom: '0.25rem' }}>Update Checklist</div>
-                <div style={{ fontSize: '0.875rem', color: '#64748B' }}>Proceed with the scanned {level === 'activitytype' ? 'Activity' : level} ({name})</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0F172A', marginBottom: '0.25rem' }}>
+                  {(level === 'koremodule' || level === 'kore') ? 'Open KORE Module Portal' : 'Update Checklist'}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#64748B' }}>
+                  {(level === 'koremodule' || level === 'kore') 
+                    ? `View & search scanned reference module ${name && name !== 'all' ? `(${name})` : ''}`
+                    : `Proceed with the scanned ${level === 'activitytype' ? 'Activity' : level} (${name})`}
+                </div>
               </div>
             </button>
 

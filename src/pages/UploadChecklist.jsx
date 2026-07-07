@@ -1,7 +1,8 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Upload, FileText, CheckCircle2, XCircle, ClipboardList, Download, List, Trash2, Power, PowerOff, Search, X, Filter, Settings, Shield } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, XCircle, ClipboardList, Download, List, Trash2, Power, PowerOff, Search, X, Filter, Settings, Shield, BookOpen } from 'lucide-react';
 import FrequencyMaster from '../components/FrequencyMaster';
 import ReviewersMaster from '../components/ReviewersMaster';
+import KoreModuleMaster from '../components/KoreModuleMaster';
 import { parseCSV, validateChecklist } from '../utils/csvParser';
 import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
@@ -387,10 +388,16 @@ const UploadChecklist = () => {
           style={{ padding: '0.75rem 1rem', borderBottom: activeTab === 'firesafety' ? '2px solid var(--primary-light)' : 'none', color: activeTab === 'firesafety' ? 'var(--primary-light)' : 'var(--text-secondary)', fontWeight: activeTab === 'firesafety' ? 600 : 400, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Shield size={18} /> Fire Safety Master
         </div>
+        <div 
+          onClick={() => setActiveTab('koremodule')}
+          style={{ padding: '0.75rem 1rem', borderBottom: activeTab === 'koremodule' ? '2px solid var(--primary-light)' : 'none', color: activeTab === 'koremodule' ? 'var(--primary-light)' : 'var(--text-secondary)', fontWeight: activeTab === 'koremodule' ? 600 : 400, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <BookOpen size={18} /> Kore Module
+        </div>
       </div>
 
       {activeTab === 'freq' && <FrequencyMaster />}
       {activeTab === 'reviewers' && <ReviewersMaster />}
+      {activeTab === 'koremodule' && <KoreModuleMaster />}
 
       {activeTab === 'upload' && (
         <div className="card">

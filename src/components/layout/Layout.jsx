@@ -12,7 +12,7 @@ const Layout = () => {
   const { units } = useData();
   const { user } = useAuth();
   
-  const isQrRoute = ['/user/execute', '/user/scan-select', '/user/support-inbox'].some(path => location.pathname.startsWith(path));
+  const isQrRoute = ['/user/execute', '/user/scan-select', '/user/support-inbox', '/user/kore-modules'].some(path => location.pathname.startsWith(path));
   const qrModeFlag = localStorage.getItem('qr_mode') === 'true';
   
   // Show QR UI ONLY for regular USERS or public scans
@@ -40,17 +40,20 @@ const Layout = () => {
   ) : null;
 
   if (isQrMode) {
+    const isKore = location.pathname.includes('kore-modules');
     return (
-      <div style={{ backgroundColor: '#F8FAFC', minHeight: '100vh', paddingBottom: '70px' }}>
+      <div style={{ backgroundColor: '#F8FAFC', minHeight: '100vh', paddingBottom: isKore ? '0' : '70px' }}>
         {themeStyles}
         {/* Simple header for QR Mode */}
-        <div style={{ backgroundColor: '#FFF', padding: '1rem', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#0F172A' }}>Shop Floor Operations</h1>
-        </div>
-        <main style={{ padding: '1rem' }}>
+        {!isKore && (
+          <div style={{ backgroundColor: '#FFF', padding: '1rem', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#0F172A' }}>Shop Floor Operations</h1>
+          </div>
+        )}
+        <main style={{ padding: isKore ? '0' : '1rem' }}>
           <Outlet />
         </main>
-        <QRBottomNav />
+        {!isKore && <QRBottomNav />}
       </div>
     );
   }

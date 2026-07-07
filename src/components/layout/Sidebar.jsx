@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LayoutDashboard, Users, ClipboardList, QrCode, PlayCircle, Inbox, FileClock, Building2, LogOut, Leaf } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, QrCode, PlayCircle, Inbox, FileClock, Building2, LogOut, Leaf, BookOpen } from 'lucide-react';
 
 const Sidebar = ({ isOpen, setIsOpen, currentUnit }) => {
   const { user, logout } = useAuth();
@@ -89,6 +89,10 @@ const Sidebar = ({ isOpen, setIsOpen, currentUnit }) => {
                 <span>Execute Checklist</span>
               </NavLink>
             )}
+            <NavLink to="/user/kore-modules" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={closeSidebar}>
+              <BookOpen size={20} />
+              <span>KORE Modules</span>
+            </NavLink>
             <NavLink to="/user/support-inbox" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={closeSidebar}>
               <Inbox size={20} />
               <span>Support Inbox</span>
