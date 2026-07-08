@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { BookOpen, FileText, Search, ArrowLeft, Eye, Download, AlertCircle, CheckCircle2, RefreshCw, Layers, File, ChevronRight, X } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import ResponsivePdfViewer from '../components/ResponsivePdfViewer';
 
 export default function KoreModuleViewer() {
-  const { koreModules = [] } = useData();
+  const { koreModules = [], loading, koreLoading, koreError } = useData();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -14,6 +15,17 @@ export default function KoreModuleViewer() {
   const [listSearchQuery, setListSearchQuery] = useState('');
   const [dynamicText, setDynamicText] = useState(null);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [targetSearchPage, setTargetSearchPage] = useState(null);
+
+  useEffect(() => {
+    console.log('[KORE Viewer] Rendering list. Total modules in memory:', koreModules.length, 'koreLoading:', koreLoading, 'koreError:', koreError);
+  }, [koreModules, koreLoading, koreError]);
+
+  const getProtectedPdfUrl = (dataUrl) => {
+    if (!dataUrl) return '';
+    if (dataUrl.includes('#')) return dataUrl;
+    return `${dataUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&print=0&copy=0`;
+  };
 
   // Check URL params on load for direct module selection from QR scan
   useEffect(() => {
@@ -29,7 +41,7 @@ export default function KoreModuleViewer() {
         setActiveMode('view');
       }
     }
-  }, [searchParams, koreModules]);
+  }, [searchParams, koreModules, selectedModule]);
 
   // Extract text on the fly if needed when switching to search mode
   useEffect(() => {
@@ -96,6 +108,7 @@ export default function KoreModuleViewer() {
     setActiveMode('view');
     setSearchQuery('');
     setDynamicText(null);
+    setTargetSearchPage(null);
     setSearchParams({ selected: mod.id });
   };
 
@@ -104,6 +117,7 @@ export default function KoreModuleViewer() {
     setActiveMode('view');
     setSearchQuery('');
     setDynamicText(null);
+    setTargetSearchPage(null);
     setSearchParams({});
   };
 
@@ -189,6 +203,30 @@ export default function KoreModuleViewer() {
     const q = listSearchQuery.toLowerCase();
     return koreModules.filter(m => m.name.toLowerCase().includes(q) || (m.fileName && m.fileName.toLowerCase().includes(q)));
   }, [koreModules, listSearchQuery]);
+
+  if ((koreLoading || loading) && koreModules.length === 0) {
+    return (
+      <div style={{ minHeight: 'calc(100vh - 80px)', backgroundColor: '#F8FAFC', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', fontFamily: 'Inter, sans-serif' }}>
+        <div style={{ width: '42px', height: '42px', border: '3.5px solid #E2E8F0', borderTopColor: '#059669', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <p style={{ color: '#475569', fontWeight: 650, fontSize: '1rem', margin: 0 }}>Loading KORE Modules from Cloud...</p>
+        <p style={{ color: '#94A3B8', fontSize: '0.8rem', margin: 0 }}>Please wait while documents synchronize over network</p>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  if (koreError && koreModules.length === 0) {
+    return (
+      <div style={{ minHeight: 'calc(100vh - 80px)', backgroundColor: '#F8FAFC', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', fontFamily: 'Inter, sans-serif' }}>
+        <AlertCircle size={48} color="#DC2626" />
+        <p style={{ color: '#0F172A', fontWeight: 700, fontSize: '1.1rem', margin: 0 }}>Failed to Load KORE Modules</p>
+        <p style={{ color: '#64748B', fontSize: '0.875rem', margin: 0, textAlign: 'center' }}>{koreError}</p>
+        <button onClick={() => window.location.reload()} className="btn btn-primary" style={{ marginTop: '0.5rem', padding: '0.5rem 1.25rem', backgroundColor: '#059669', border: 'none' }}>
+          Retry Fetch
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: 'calc(100vh - 80px)', backgroundColor: '#F8FAFC', padding: '0.75rem', fontFamily: 'Inter, sans-serif' }}>
@@ -355,13 +393,35 @@ export default function KoreModuleViewer() {
 
             {/* MODE A: VIEW DOCUMENT */}
             {activeMode === 'view' && (
-              <div style={{ flex: 1, backgroundColor: '#525659', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0', overflowY: 'auto' }}>
+              <div 
+                style={{ flex: 1, backgroundColor: '#525659', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0', overflowY: 'auto', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
+                onContextMenu={(e) => { e.preventDefault(); alert('Security Policy: Right-clicking, copying, downloading, and printing KORE documents is disabled.'); return false; }}
+                onKeyDown={(e) => {
+                  if (e.key === 'PrintScreen' || (e.ctrlKey && ['p', 's', 'c', 'u'].includes(e.key.toLowerCase()))) {
+                    e.preventDefault();
+                    alert('Security Policy: Downloading, printing, copying, and screenshotting KORE documents is disabled.');
+                  }
+                }}
+              >
+                <style>{`
+                  @media print {
+                    body * { display: none !important; }
+                    body:after {
+                      content: 'Printing and copying of KORE modules is strictly prohibited by security policy.';
+                      display: block !important;
+                      font-size: 20px;
+                      text-align: center;
+                      margin-top: 50px;
+                    }
+                  }
+                `}</style>
                 {selectedModule.fileName?.toLowerCase().endsWith('.pdf') || selectedModule.fileType?.includes('pdf') ? (
                   <div style={{ width: '100%', height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
-                    <iframe
-                      src={selectedModule.fileData}
-                      style={{ width: '100%', height: '100%', border: 'none', backgroundColor: 'white' }}
-                      title={selectedModule.name}
+                    <ResponsivePdfViewer
+                      fileData={selectedModule.fileData}
+                      fileName={selectedModule.fileName || selectedModule.name}
+                      targetPage={targetSearchPage}
+                      height="100%"
                     />
                   </div>
                 ) : (
@@ -371,9 +431,9 @@ export default function KoreModuleViewer() {
                         <h2 style={{ margin: '0 0 0.35rem 0', color: '#0F172A', fontSize: '1.5rem' }}>{selectedModule.name}</h2>
                         <span style={{ color: '#64748B', fontSize: '0.875rem' }}>{selectedModule.fileName}</span>
                       </div>
-                      <a href={selectedModule.fileData} download={selectedModule.fileName} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
-                        <Download size={16} /> Download Document
-                      </a>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.85rem', backgroundColor: '#FEF2F2', color: '#DC2626', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 650 }}>
+                        <AlertCircle size={14} /> Confidential & Protected Document (No Download / Print)
+                      </div>
                     </div>
 
                     {parsedTextData ? (
@@ -392,11 +452,8 @@ export default function KoreModuleViewer() {
                         <AlertCircle size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
                         <h3 style={{ color: '#1E293B', margin: '0 0 0.5rem' }}>Word Document Preview</h3>
                         <p style={{ maxWidth: '400px', margin: '0 auto 1.5rem', fontSize: '0.95rem' }}>
-                          Please download this Word document to view its full formatting and contents.
+                          Confidential Document: Download disabled by security policy.
                         </p>
-                        <a href={selectedModule.fileData} download={selectedModule.fileName} className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
-                          <Download size={16} /> Download Now
-                        </a>
                       </div>
                     )}
                   </div>
@@ -485,7 +542,10 @@ export default function KoreModuleViewer() {
                                 </span>
                               )}
                               <button
-                                onClick={() => setActiveMode('view')}
+                                onClick={() => {
+                                  setTargetSearchPage(res.page || 1);
+                                  setActiveMode('view');
+                                }}
                                 className="btn btn-secondary"
                                 style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#059669', borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}
                               >

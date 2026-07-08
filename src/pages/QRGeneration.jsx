@@ -264,41 +264,6 @@ const QRGeneration = () => {
                   </div>
                 </div>
               )}
-
-              {/* Individual Modules */}
-              {koreModules
-                .filter(m => !searchQuery || m.name.toLowerCase().includes(searchQuery.toLowerCase()) || (m.fileName && m.fileName.toLowerCase().includes(searchQuery.toLowerCase())))
-                .map(mod => {
-                  const scanUrl = getScanUrl(mod.name, true, mod.id);
-                  return (
-                    <div key={mod.id} className="qr-card" style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', backgroundColor: 'var(--surface-color)', pageBreakInside: 'avoid' }}>
-                      <div style={{ width: '150px', height: '150px', backgroundColor: '#FFF', padding: '10px', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem' }}>
-                        <QRCode value={scanUrl} size={130} />
-                      </div>
-                      <h4 style={{ margin: '0 0 0.25rem 0', color: 'var(--text-primary)', fontSize: '1.05rem', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={mod.name}>{mod.name}</h4>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                        <FileText size={13} /> {mod.fileName}
-                      </div>
-
-                      <div className="no-print" style={{ display: 'flex', width: '100%', gap: '0.5rem', marginTop: 'auto', paddingTop: '1rem' }}>
-                        <button
-                          className="btn btn-secondary"
-                          style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem' }}
-                          onClick={() => window.open(scanUrl, '_blank')}
-                        >
-                          Test Scan
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', color: 'var(--primary-dark)' }}
-                          onClick={() => handlePrintSingle(mod, true)}
-                        >
-                          Print
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
             </div>
           </div>
         )}

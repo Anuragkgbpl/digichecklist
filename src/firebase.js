@@ -15,10 +15,12 @@ const app = initializeApp(firebaseConfig);
 export const db = getDatabase(app);
 
 // Helper functions for easy sync
-export const syncData = (path, callback) => {
+export const syncData = (path, callback, errorCallback) => {
   const dataRef = ref(db, path);
   return onValue(dataRef, (snapshot) => {
     callback(snapshot.val());
+  }, (error) => {
+    if (errorCallback) errorCallback(error);
   });
 };
 
@@ -37,4 +39,8 @@ export const pushData = async (path, record) => {
 // Atomically writes multiple new records under a path with their own keys (highly optimized append)
 export const batchAppendData = async (path, recordsObj) => {
   await update(ref(db, path), recordsObj);
+};
+
+export const removeData = async (path) => {
+  await remove(ref(db, path));
 };

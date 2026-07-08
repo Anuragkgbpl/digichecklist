@@ -27,6 +27,8 @@ export const DataProvider = ({ children }) => {
   const [reviewers, setReviewers] = useState([]);
   const [koreModules, setKoreModules] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [koreLoading, setKoreLoading] = useState(true);
+  const [koreError, setKoreError] = useState(null);
 
   useEffect(() => {
     // 1. Sync Employees
@@ -80,8 +82,17 @@ export const DataProvider = ({ children }) => {
     });
 
     // 11. Sync Kore Modules
+    console.log('[KORE Modules Fetch] Initiating sync for path: kore_modules');
     const unsubKore = syncData('kore_modules', (val) => {
-      setKoreModules(mapFirebaseValues(val));
+      const mapped = mapFirebaseValues(val);
+      console.log(`[KORE Modules Fetch] Successfully fetched kore_modules. Result count: ${mapped.length}`, mapped);
+      setKoreModules(mapped);
+      setKoreLoading(false);
+      setKoreError(null);
+    }, (err) => {
+      console.error('[KORE Modules Fetch] Error fetching kore_modules:', err);
+      setKoreError(err?.message || 'Error fetching KORE modules');
+      setKoreLoading(false);
     });
 
     setLoading(false);
@@ -125,7 +136,7 @@ export const DataProvider = ({ children }) => {
   return (
     <DataContext.Provider value={{ 
       employees, checklists, units, submissions, supportInbox, logs, activities, shifts, frequencies, reviewers, koreModules,
-      updateFirebase, patchFirebase, appendFirebase, loading 
+      updateFirebase, patchFirebase, appendFirebase, loading, koreLoading, koreError 
     }}>
       {children}
     </DataContext.Provider>

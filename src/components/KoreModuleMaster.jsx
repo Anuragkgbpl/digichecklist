@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { Plus, Trash2, Edit, FileText, Upload, BookOpen, Check, X, AlertCircle, Eye, RefreshCw, File, ShieldAlert } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { saveData, removeData } from '../firebase';
+import ResponsivePdfViewer from './ResponsivePdfViewer';
 
 export default function KoreModuleMaster() {
   const { koreModules = [], updateFirebase } = useData();
@@ -157,27 +159,26 @@ export default function KoreModuleMaster() {
       const timestamp = new Date().toISOString().split('T')[0];
 
       if (editingId) {
-        const updated = koreModules.map(m => {
-          if (m.id === editingId) {
-            return {
-              ...m,
-              name: moduleName.trim(),
-              ...finalFileInfo,
-              updatedAt: timestamp
-            };
-          }
-          return m;
-        });
-        await updateFirebase('kore_modules', updated);
+        const targetMod = koreModules.find(m => m.id === editingId);
+        const fbKey = targetMod?._fbKey || editingId;
+        const updatedMod = {
+          ...targetMod,
+          name: moduleName.trim(),
+          ...finalFileInfo,
+          updatedAt: timestamp
+        };
+        delete updatedMod._fbKey;
+        await saveData(`kore_modules/${fbKey}`, updatedMod);
       } else {
+        const newId = 'kore_' + Date.now();
         const newRecord = {
-          id: 'kore_' + Date.now(),
+          id: newId,
           name: moduleName.trim(),
           ...finalFileInfo,
           createdAt: timestamp,
           updatedAt: timestamp
         };
-        await updateFirebase('kore_modules', [...koreModules, newRecord]);
+        await saveData(`kore_modules/${newId}`, newRecord);
       }
 
       setIsModalOpen(false);
@@ -194,8 +195,9 @@ export default function KoreModuleMaster() {
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this KORE Module? This will remove the uploaded document.')) {
-      const updated = koreModules.filter(m => m.id !== id);
-      await updateFirebase('kore_modules', updated);
+      const targetMod = koreModules.find(m => m.id === id);
+      const fbKey = targetMod?._fbKey || id;
+      await removeData(`kore_modules/${fbKey}`);
     }
   };
 
@@ -448,12 +450,21 @@ export default function KoreModuleMaster() {
               </button>
             </div>
 
-            <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', backgroundColor: '#F1F5F9', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div 
+              style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', backgroundColor: '#F1F5F9', display: 'flex', flexDirection: 'column', alignItems: 'center', userSelect: 'none', WebkitUserSelect: 'none' }}
+              onContextMenu={(e) => { e.preventDefault(); alert('Security Policy: Right-clicking, copying, downloading, and printing KORE documents is disabled.'); return false; }}
+              onKeyDown={(e) => {
+                if (e.key === 'PrintScreen' || (e.ctrlKey && ['p', 's', 'c', 'u'].includes(e.key.toLowerCase()))) {
+                  e.preventDefault();
+                  alert('Security Policy: Downloading, printing, copying, and screenshotting KORE documents is disabled.');
+                }
+              }}
+            >
               {viewingModule.fileName?.toLowerCase().endsWith('.pdf') || viewingModule.fileType?.includes('pdf') ? (
-                <iframe
-                  src={viewingModule.fileData}
-                  style={{ width: '100%', height: '100%', border: 'none', borderRadius: '8px', backgroundColor: 'white', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
-                  title={viewingModule.name}
+                <ResponsivePdfViewer
+                  fileData={viewingModule.fileData}
+                  fileName={viewingModule.fileName || viewingModule.name}
+                  height="100%"
                 />
               ) : (
                 <div style={{ width: '100%', backgroundColor: 'white', padding: '2.5rem', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', minHeight: '100%', boxSizing: 'border-box' }}>
