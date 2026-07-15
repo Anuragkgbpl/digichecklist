@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 
 import { useData } from '../context/DataContext';
-import AdvancedAnalyticsDashboard from '../components/AdvancedAnalyticsDashboard';
+import AdvancedAnalyticsDashboard, { Section10AgingReport, Section11ReviewerPerformance } from '../components/AdvancedAnalyticsDashboard';
 
 const getLocalDateStr = (d) => {
   const y = d.getFullYear();
@@ -132,7 +132,9 @@ const generateFireSafetyMockData = () => {
 const Dashboard = () => {
   const { user } = useAuth();
   const { submissions: rawData = [], supportInbox = [], checklists: masterChecklists = [], reviewers = [], employees = [], shifts = [] } = useData();
-  const [activeTab, setActiveTab] = useState('realtime');
+  const [activeTab, setActiveTab] = useState('advanced');
+  const [fsTrendRange, setFsTrendRange] = useState('MTD');
+  const [fsAreaRange, setFsAreaRange] = useState('MTD');
   const [showFilters, setShowFilters] = useState(false);
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -192,10 +194,43 @@ const Dashboard = () => {
 
   const fireSafetyStats = useMemo(() => {
     const data = filteredFSData;
-    const totalCheckpoints = data.length;
-    const okCount = data.filter(d => d.Status === 'OK' || d.Status === 'Done').length;
-    const notOkCount = data.filter(d => d.Status === 'Not OK' || d.Status === 'Support Required' || d.Status === 'Support').length;
-    const complianceRate = totalCheckpoints ? Math.round((okCount / totalCheckpoints) * 100) : 100;
+    
+    // 1. Overall Safety Compliance & Safety Checkpoints (based on latest update reference till new inspection, out of Total Checklist Activity = 858)
+    const latestStatusMap = {};
+    data.forEach(r => {
+      const key = r.Asset_ID || `${r.Equipment_Category}-${r.Component}-${r.Activity_Description}`;
+      const ts = new Date(r.Date_Timestamp || r.timestamp || r.Date || 0).getTime();
+      if (!latestStatusMap[key] || ts >= latestStatusMap[key].ts) {
+        latestStatusMap[key] = { status: r.Status, ts };
+      }
+    });
+
+    const uniqueKeys = Object.keys(latestStatusMap);
+    let inspectedNotOk = 0;
+    uniqueKeys.forEach(k => {
+      const s = latestStatusMap[k].status;
+      if (s === 'Not OK' || s === 'Support Required' || s === 'Support') {
+        inspectedNotOk++;
+      }
+    });
+
+    const baseFSChecklists = masterChecklists.filter(c => {
+      if (c.Type_of_Activity !== 'Fire Safety') return false;
+      if (filters.line !== 'ALL' && c.Line_Equipment !== filters.line) return false;
+      if (filters.subLine !== 'ALL' && c.Sub_Line_Equipment !== filters.subLine) return false;
+      if (filters.component !== 'ALL' && c.Component !== filters.component) return false;
+      if (filters.frequency && filters.frequency !== 'ALL' && c.Frequency !== filters.frequency) return false;
+      return true;
+    });
+
+    let totalCheckpoints = baseFSChecklists.length > 0 ? baseFSChecklists.length : Math.max(uniqueKeys.length, 858);
+    if (filters.line === 'ALL' && filters.subLine === 'ALL' && filters.component === 'ALL' && (!filters.frequency || filters.frequency === 'ALL') && totalCheckpoints < 858) {
+      totalCheckpoints = 858;
+    }
+
+    const notOkCount = inspectedNotOk;
+    const okCount = Math.max(0, totalCheckpoints - notOkCount);
+    const complianceRate = totalCheckpoints > 0 ? Math.round((okCount / totalCheckpoints) * 100) : 100;
     
     const categoryMap = {};
     data.forEach(r => {
@@ -213,26 +248,46 @@ const Dashboard = () => {
     })).sort((a, b) => b.Compliance - a.Compliance);
 
     const referenceDate = filters.dateEnd ? new Date(filters.dateEnd) : new Date();
-    const dates7 = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(referenceDate);
-      d.setDate(d.getDate() - i);
-      dates7.push(getLocalDateStr(d));
-    }
-    
-    const topCategories = categoryCompliance.slice(0, 5).map(c => c.name);
-    
-    const complianceTrend = dates7.map(date => {
-      const dayLogs = data.filter(r => r.Date === date);
-      const res = { date };
-      topCategories.forEach(cat => {
-        const catLogs = dayLogs.filter(r => r.Equipment_Category === cat);
-        const total = catLogs.length;
-        const ok = catLogs.filter(d => d.Status === 'OK' || d.Status === 'Done').length;
-        res[cat] = total ? Math.round((ok / total) * 100) : null;
+    const todayStr = getLocalDateStr(referenceDate);
+    const yestDate = new Date(referenceDate);
+    yestDate.setDate(yestDate.getDate() - 1);
+    const yesterdayStr = getLocalDateStr(yestDate);
+    const mtdStartStr = `${referenceDate.getFullYear()}-${String(referenceDate.getMonth() + 1).padStart(2, '0')}-01`;
+    const ytdStartStr = `${referenceDate.getFullYear()}-01-01`;
+
+    const getRangeFilteredData = (range) => {
+      return data.filter(d => {
+        if (!d.Date) return false;
+        if (range === 'Today') return d.Date === todayStr;
+        if (range === 'Yesterday') return d.Date === yesterdayStr;
+        if (range === 'MTD') return d.Date >= mtdStartStr && d.Date <= todayStr;
+        if (range === 'YTD') return d.Date >= ytdStartStr && d.Date <= todayStr;
+        return true;
       });
-      return res;
+    };
+
+    // Safety Compliance Trend Bar Chart data (by Equipment Category for selected fsTrendRange)
+    const trendRangeData = getRangeFilteredData(fsTrendRange);
+    const trendCategoryMap = {};
+    trendRangeData.forEach(r => {
+      const cat = r.Equipment_Category || 'General Fire Safety';
+      if (!trendCategoryMap[cat]) trendCategoryMap[cat] = { total: 0, ok: 0 };
+      trendCategoryMap[cat].total++;
+      if (r.Status === 'OK' || r.Status === 'Done') trendCategoryMap[cat].ok++;
     });
+    const standardCategories = ['Fire Extinguisher', 'Fire Hydrant System', 'Smoke Detector', 'Alarm System', 'Emergency Exit', 'Sprinkler System', 'Safety Signage'];
+    standardCategories.forEach(cat => {
+      if (!trendCategoryMap[cat]) trendCategoryMap[cat] = { total: 0, ok: 0 };
+    });
+    const complianceTrend = Object.entries(trendCategoryMap).map(([name, stat]) => ({
+      name,
+      Compliance: stat.total > 0 ? Math.round((stat.ok / stat.total) * 100) : 100,
+      Total: stat.total,
+      OK: stat.ok,
+      NotOK: stat.total - stat.ok
+    })).sort((a, b) => b.Total - a.Total);
+
+    const topCategories = categoryCompliance.slice(0, 5).map(c => c.name);
     
     const dates10 = [];
     for (let i = 9; i >= 0; i--) {
@@ -247,18 +302,23 @@ const Dashboard = () => {
       return { date, OK: ok, 'Not OK': notOk, Total: dayLogs.length };
     });
     
+    const areaRangeData = getRangeFilteredData(fsAreaRange);
     const areaMap = {};
-    data.forEach(r => {
-      const area = r.Area_Zone || r.Area || 'Unknown';
+    areaRangeData.forEach(r => {
+      const area = r.Area_Zone || r.Area || 'Plant Wide';
       if (!areaMap[area]) areaMap[area] = { total: 0, ok: 0 };
       areaMap[area].total++;
       if (r.Status === 'OK' || r.Status === 'Done') areaMap[area].ok++;
     });
+    const standardAreas = ['Syrup Room Area', 'Packaging Zone A', 'Packaging Zone B', 'Raw Material Storage', 'Finished Goods Warehouse', 'Utility Boiler & Compressor', 'QA Lab & Office Building'];
+    standardAreas.forEach(area => {
+      if (!areaMap[area]) areaMap[area] = { total: 0, ok: 0 };
+    });
     const areaCompliance = Object.entries(areaMap).map(([name, stat]) => ({
       name,
-      Compliance: Math.round((stat.ok / stat.total) * 100),
+      Compliance: stat.total > 0 ? Math.round((stat.ok / stat.total) * 100) : 100,
       Total: stat.total
-    })).sort((a, b) => b.Compliance - a.Compliance);
+    })).sort((a, b) => a.Compliance - b.Compliance);
     
     const freqMap = {};
     data.forEach(r => {
@@ -410,9 +470,8 @@ const Dashboard = () => {
       equipmentAvailability,
       photoAttachedRate,
       approvalRate,
-      docComplianceRate
     };
-  }, [filteredFSData, supportInbox, filters.dateEnd]);
+  }, [filteredFSData, supportInbox, filters.dateEnd, fsTrendRange, fsAreaRange, masterChecklists, filters.line, filters.subLine, filters.component, filters.frequency]);
 
 
   const COLORS = {
@@ -1140,15 +1199,10 @@ const Dashboard = () => {
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', overflowX: 'auto', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
         {[
           { id: 'advanced', label: '👑 Advanced Analysis', icon: Award },
-          { id: 'realtime', label: '📊 Real-Time Operations', icon: Activity },
           { id: 'firesafety', label: '🔥 Fire Safety Analytics', icon: Flame },
-          { id: 'shift', label: '🔄 Shift & Carry-Forward', icon: RefreshCw },
-          { id: 'time', label: '⏱ Time & Productivity', icon: Clock },
-          { id: 'workforce', label: '👥 Workforce Performance', icon: Users },
           { id: 'compliance', label: '🧩 Activity & Compliance', icon: ClipboardList },
           { id: 'aging', label: '⏳ Aging Report', icon: FileClock },
-          {id: 'insights', label: '🔮 Alerts & Insights', icon: AlertTriangle},
-          {id: 'review_perf', label: '🛡️ Reviewer Performance', icon: Shield}
+          { id: 'review_perf', label: '🛡️ Reviewer Performance', icon: Shield }
         ].map(tab => {
           const IconComp = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1186,110 +1240,9 @@ const Dashboard = () => {
         <AdvancedAnalyticsDashboard 
           preFilteredData={filteredData} 
           baseChecklists={baselineChecklists} 
+          backlogTrend={shiftAnalysis.backlogTrend}
+          hourlyPeak={productivityStats.hourlyPeak}
         />
-      )}
-
-      {/* ========================================================
-          TAB 1: REAL-TIME OPERATIONS
-          ======================================================== */}
-      {activeTab === 'realtime' && (
-        <div>
-          {/* Aesthetic Dashboard Realtime Metrics Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
-            <div className="card" style={{ borderLeft: `5px solid ${COLORS.WIP}`, padding: '1.5rem', marginBottom: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                <span>Total Tasks Today</span>
-                <ClipboardList size={16} />
-              </div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0.5rem 0' }}>{realTimeStats.totalToday}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Checklist baseline planned</div>
-            </div>
-
-            <div className="card" style={{ borderLeft: `5px solid ${COLORS.Done}`, padding: '1.5rem', marginBottom: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                <span>Completed</span>
-                <CheckCircle size={16} color={COLORS.Done} />
-              </div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: COLORS.Done, margin: '0.5rem 0' }}>{realTimeStats.completedToday}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Successfully checked done</div>
-            </div>
-
-            <div className="card" style={{ borderLeft: `5px solid ${COLORS.Hold}`, padding: '1.5rem', marginBottom: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                <span>In Progress</span>
-                <Clock size={16} color={COLORS.Hold} />
-              </div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: COLORS.Hold, margin: '0.5rem 0' }}>{realTimeStats.wipToday}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Activities currently running</div>
-            </div>
-
-            <div className="card" style={{ borderLeft: `5px solid ${COLORS.Support}`, padding: '1.5rem', marginBottom: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                <span>Pending Today</span>
-                <AlertTriangle size={16} color={COLORS.Support} />
-              </div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: COLORS.Support, margin: '0.5rem 0' }}>{realTimeStats.pendingToday}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Tasks remaining for cycle</div>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
-            <div className="card" style={{ padding: '1.5rem', marginBottom: 0, textAlign: 'center', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
-              <Users size={32} color="#2563EB" style={{ margin: '0 auto 0.75rem' }} />
-              <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1E3A8A' }}>{realTimeStats.activeUsersCount}</h3>
-              <p style={{ margin: '0.25rem 0 0 0', fontWeight: 600, color: '#1E40AF', fontSize: '0.85rem' }}>Active Personnel Contributed Today</p>
-            </div>
-
-            <div className="card" style={{ padding: '1.5rem', marginBottom: 0, textAlign: 'center', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
-              <RefreshCw size={32} color="#16A34A" style={{ margin: '0 auto 0.75rem' }} />
-              <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#064E3B' }}>{realTimeStats.carryForwardTasks}</h3>
-              <p style={{ margin: '0.25rem 0 0 0', fontWeight: 600, color: '#15803D', fontSize: '0.85rem' }}>Backlog Carry-Forward Tasks</p>
-            </div>
-
-            <div className="card" style={{ padding: '1.5rem', marginBottom: 0, textAlign: 'center', backgroundColor: '#F5F3FF', border: '1px solid #DDD6FE' }}>
-              <Clock size={32} color="#7C3AED" style={{ margin: '0 auto 0.75rem' }} />
-              <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#4C1D95' }}>{realTimeStats.avgTat}</h3>
-              <p style={{ margin: '0.25rem 0 0 0', fontWeight: 600, color: '#6D28D9', fontSize: '0.85rem' }}>Average Resolution Time (TAT)</p>
-            </div>
-          </div>
-
-          {/* Core trend preview */}
-          <div className="card" style={{ padding: '1.5rem' }}>
-            <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-              <TrendingUp size={18} color="var(--primary-light)" /> 7-Day Performance trend
-            </h3>
-            <div style={{ height: '300px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stackedStatusTrend} margin={{ left: -10, right: 10 }}>
-                  <defs>
-                    <linearGradient id="colorDone" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={COLORS.Done} stopOpacity={0.6}/><stop offset="95%" stopColor={COLORS.Done} stopOpacity={0.0}/></linearGradient>
-                    <linearGradient id="colorWIP" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={COLORS.WIP} stopOpacity={0.6}/><stop offset="95%" stopColor={COLORS.WIP} stopOpacity={0.0}/></linearGradient>
-                    <linearGradient id="colorHold" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={COLORS.Hold} stopOpacity={0.6}/><stop offset="95%" stopColor={COLORS.Hold} stopOpacity={0.0}/></linearGradient>
-                    <linearGradient id="colorSupport" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={COLORS.Support} stopOpacity={0.6}/><stop offset="95%" stopColor={COLORS.Support} stopOpacity={0.0}/></linearGradient>
-                    <linearGradient id="colorPending" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={COLORS.Pending} stopOpacity={0.6}/><stop offset="95%" stopColor={COLORS.Pending} stopOpacity={0.0}/></linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                  <XAxis dataKey="date" fontSize={10} axisLine={false} tickLine={false} />
-                  <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.08)' }} 
-                    formatter={(value, name, props) => {
-                      const total = (props.payload.Done || 0) + (props.payload.WIP || 0) + (props.payload.Hold || 0) + (props.payload.Support || 0) + (props.payload.Pending || 0);
-                      const pct = total ? Math.round((value / total) * 100) : 0;
-                      return [`${value} (${pct}%)`, name];
-                    }}
-                  />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                  <Area type="monotone" dataKey="Done" stackId="1" stroke={COLORS.Done} fill="url(#colorDone)" name="Done" strokeWidth={2.5} />
-                  <Area type="monotone" dataKey="WIP" stackId="1" stroke={COLORS.WIP} fill="url(#colorWIP)" name="In Progress" strokeWidth={2.5} />
-                  <Area type="monotone" dataKey="Hold" stackId="1" stroke={COLORS.Hold} fill="url(#colorHold)" name="Hold" strokeWidth={2.5} />
-                  <Area type="monotone" dataKey="Support" stackId="1" stroke={COLORS.Support} fill="url(#colorSupport)" name="Support Required" strokeWidth={2.5} />
-                  <Area type="monotone" dataKey="Pending" stackId="1" stroke={COLORS.Pending} fill="url(#colorPending)" name="Pending" strokeWidth={2.5} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* ========================================================
@@ -1364,21 +1317,46 @@ const Dashboard = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
             {/* Widget 3: Safety Compliance Trend Card */}
             <div className="card" style={{ padding: '1.5rem', marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                <TrendingUp size={18} color="var(--primary-light)" /> Safety Compliance Trend (Last 7 Days)
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
+                  <TrendingUp size={18} color="var(--primary-light)" /> Safety Compliance Trend / Breakdown (%)
+                </h3>
+                <div style={{ display: 'flex', gap: '0.35rem', backgroundColor: '#F1F5F9', padding: '0.2rem', borderRadius: '6px' }}>
+                  {['Today', 'Yesterday', 'MTD', 'YTD'].map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => setFsTrendRange(opt)}
+                      style={{
+                        padding: '0.25rem 0.6rem',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        backgroundColor: fsTrendRange === opt ? '#3B82F6' : 'transparent',
+                        color: fsTrendRange === opt ? '#fff' : '#475569',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div style={{ height: '280px' }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={fireSafetyStats.complianceTrend} margin={{ left: -15, right: 10, top: 10 }}>
+                  <BarChart data={fireSafetyStats.complianceTrend} margin={{ left: -15, right: 10, top: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                    <XAxis dataKey="date" fontSize={9} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="name" fontSize={9} axisLine={false} tickLine={false} tickFormatter={(val) => val.split(' ')[0] || val} />
                     <YAxis fontSize={9} axisLine={false} tickLine={false} unit="%" domain={[0, 100]} />
-                    <Tooltip />
+                    <Tooltip formatter={(val) => [`${val}%`, 'Compliance']} />
                     <Legend wrapperStyle={{ fontSize: '10px' }} />
-                    {fireSafetyStats.topCategories.map((cat, i) => (
-                      <Line key={cat} type="monotone" dataKey={cat} stroke={['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6'][i % 5]} name={cat} strokeWidth={2.5} dot={{ r: 3 }} />
-                    ))}
-                  </LineChart>
+                    <Bar dataKey="Compliance" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={24} name="Compliance %">
+                      {fireSafetyStats.complianceTrend.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.Compliance < 80 ? '#EF4444' : (entry.Compliance < 95 ? '#F59E0B' : '#10B981')} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
@@ -1407,18 +1385,41 @@ const Dashboard = () => {
           {/* Row 3: Breakdown Charts */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
             {/* Widget 4: Area / Zone Wise Compliance Bar */}
-            <div className="card" style={{ padding: '1.5rem', marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                <Layers size={18} /> Area / Zone Safety Compliance (%)
-              </h3>
-              <div style={{ height: '280px' }}>
+            <div className="card" style={{ padding: '1.5rem', marginBottom: 0, gridColumn: '1 / -1' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
+                  <Layers size={18} color="#8B5CF6" /> Area / Zone Safety Compliance (%)
+                </h3>
+                <div style={{ display: 'flex', gap: '0.35rem', backgroundColor: '#F1F5F9', padding: '0.2rem', borderRadius: '6px' }}>
+                  {['Today', 'Yesterday', 'MTD', 'YTD'].map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => setFsAreaRange(opt)}
+                      style={{
+                        padding: '0.25rem 0.6rem',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        backgroundColor: fsAreaRange === opt ? '#8B5CF6' : 'transparent',
+                        color: fsAreaRange === opt ? '#fff' : '#475569',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ height: '380px' }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={fireSafetyStats.areaCompliance} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+                  <BarChart data={fireSafetyStats.areaCompliance} layout="vertical" margin={{ left: 20, right: 30, top: 10, bottom: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
-                    <XAxis type="number" fontSize={9} axisLine={false} tickLine={false} unit="%" domain={[0, 100]} />
-                    <YAxis dataKey="name" type="category" fontSize={9} axisLine={false} tickLine={false} width={80} />
-                    <Tooltip />
-                    <Bar dataKey="Compliance" fill="#8B5CF6" radius={[0, 4, 4, 0]} barSize={12} name="Compliance Rate">
+                    <XAxis type="number" fontSize={11} axisLine={false} tickLine={false} unit="%" domain={[0, 100]} />
+                    <YAxis dataKey="name" type="category" fontSize={11} axisLine={false} tickLine={false} width={130} />
+                    <Tooltip formatter={(val) => [`${val}%`, 'Compliance Rate']} />
+                    <Bar dataKey="Compliance" fill="#8B5CF6" radius={[0, 6, 6, 0]} barSize={20} name="Compliance Rate">
                       {fireSafetyStats.areaCompliance.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.Compliance < 75 ? '#EF4444' : '#8B5CF6'} />
                       ))}
@@ -1667,294 +1668,6 @@ const Dashboard = () => {
       )}
 
       {/* ========================================================
-          TAB 2: SHIFT & CARRY-FORWARD ANALYTICS
-          ======================================================== */}
-      {activeTab === 'shift' && (
-        <div style={{ display: 'grid', gap: '1.5rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
-            {/* Shift Performance Grid Table */}
-            {/* <div className="card" style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                <Layers size={18} /> Shift-wise Completion Rate
-              </h3>
-              <div style={{ height: '320px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={shiftAnalysis.dataByShift} margin={{ left: -10, right: 10, top: 10, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                    <XAxis dataKey="name" fontSize={11} axisLine={false} tickLine={false} />
-                    <YAxis fontSize={11} axisLine={false} tickLine={false} unit="%" />
-                    <Tooltip />
-                    <Bar dataKey="completionRate" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={35} name="Completion Rate %">
-                      {shiftAnalysis.dataByShift.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={SHIFT_COLORS[index % SHIFT_COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div> */}
-
-            {/* Backlog buildup accumulation */}
-            <div className="card" style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                <RefreshCw size={18} /> Day-wise Backlog Accumulation
-              </h3>
-              <div style={{ height: '320px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={shiftAnalysis.backlogTrend}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                    <XAxis dataKey="date" fontSize={11} axisLine={false} tickLine={false} />
-                    <YAxis fontSize={11} axisLine={false} tickLine={false} />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="Backlog" stroke="#EF4444" strokeWidth={3} dot={{ r: 4 }} name="Carry-forward Backlog" />
-                    <Line type="monotone" dataKey="Resolved" stroke="#10B981" strokeWidth={3} dot={{ r: 4 }} name="Resolved Jobs" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      )}
-
-      {/* ========================================================
-          TAB 3: PRODUCTIVITY & TIME ANALYTICS
-          ======================================================== */}
-      {activeTab === 'time' && (
-        <div style={{ display: 'grid', gap: '1.5rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
-            {/* Peak hours area chart */}
-            <div className="card" style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                <Clock size={18} /> Peak Execution Hours (Time Distribution)
-              </h3>
-              <div style={{ height: '320px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={productivityStats.hourlyPeak}>
-                    <defs>
-                      <linearGradient id="colorHour" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                    <XAxis dataKey="hour" fontSize={11} axisLine={false} tickLine={false} />
-                    <YAxis fontSize={11} axisLine={false} tickLine={false} />
-                    <Tooltip />
-                    <Area type="monotone" dataKey="count" stroke="#8B5CF6" strokeWidth={3} fillOpacity={1} fill="url(#colorHour)" name="Submissions" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Slowest activities duration bar */}
-            <div className="card" style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                <Clock size={18} /> Activity Completion Time (In Minutes)
-              </h3>
-              <div style={{ height: '320px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={productivityStats.durationByActivity} layout="vertical" margin={{ left: 10, right: 30, top: 10, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
-                    <XAxis type="number" fontSize={10} axisLine={false} tickLine={false} tickFormatter={(val) => `${val}m`} />
-                    <YAxis dataKey="name" type="category" fontSize={10} axisLine={false} tickLine={false} width={120} />
-                    <Tooltip formatter={(value) => [`${value} minutes`, 'Avg. Duration']} />
-                    <Bar dataKey="minutes" fill="#F59E0B" radius={[0, 4, 4, 0]} barSize={16} name="Avg. Minutes" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
-            <div className="card" style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: 0, padding: '1rem 1.5rem', border: '1px solid #E2E8F0' }}>
-              <div style={{ backgroundColor: '#EFF6FF', color: '#3B82F6', borderRadius: '50%', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', fontWeight: 800 }}>🌅</div>
-              <div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{productivityStats.earlyCompletions}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>EARLY SHIFT SUBMISSIONS (06:00 - 10:00)</div>
-              </div>
-            </div>
-
-            <div className="card" style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: 0, padding: '1rem 1.5rem', border: '1px solid #E2E8F0' }}>
-              <div style={{ backgroundColor: '#FEE2E2', color: '#EF4444', borderRadius: '50%', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', fontWeight: 800 }}>🌙</div>
-              <div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{productivityStats.lateCompletions}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>LATE SHIFT SUBMISSIONS (18:00 - 22:00)</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================
-          TAB 4: WORKFORCE & LEADERBOARD
-          ======================================================== */}
-      {activeTab === 'workforce' && (
-        <div style={{ display: 'grid', gap: '1.5rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
-            {/* Workforce Leaderboard */}
-            <div className="card" style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                <Award size={18} color="#10B981" /> Contribution Leaderboard (Completed Tasks)
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-                {userPerformance.leaderboard.map((emp, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid #F1F5F9' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-tertiary)', width: '20px' }}>#{i+1}</span>
-                      <div>
-                        <strong style={{ fontSize: '0.85rem' }}>{emp.name}</strong>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Resolution Rate: {emp.completionRate}%</div>
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#10B981' }}>{emp.completed}</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}> / {emp.total} Tasks</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Load distribution split */}
-            <div className="card" style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                <Users size={18} /> Workload Split Across Users
-              </h3>
-              <div style={{ height: '320px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={userPerformance.leaderboard}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={65}
-                      outerRadius={105}
-                      paddingAngle={5}
-                      dataKey="completed"
-                      nameKey="name"
-                      label={({ name, percent }) => `${name.split(' ')[0]} (${(percent * 100).toFixed(0)}%)`}
-                    >
-                      {userPerformance.leaderboard.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={SHIFT_COLORS[index % SHIFT_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '10px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-
-          {/* Overdependence Burnout Checker */}
-          <div className="card" style={{ backgroundColor: userPerformance.topUserPct > 50 ? '#FFF5F5' : '#F0FDF4', border: `1px solid ${userPerformance.topUserPct > 50 ? '#FCA5A5' : '#BBF7D0'}`, padding: '1.5rem' }}>
-            <h4 style={{ margin: '0 0 0.5rem 0', color: userPerformance.topUserPct > 50 ? '#991B1B' : '#166534', fontSize: '1.1rem', fontWeight: 700 }}>
-              {userPerformance.topUserPct > 50 ? '⚠️ High Workload Overdependence Detected' : '✅ Healthy Load Distribution'}
-            </h4>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: userPerformance.topUserPct > 50 ? '#7F1D1D' : '#14532D', lineHeight: 1.5 }}>
-              Top performer **{userPerformance.topUserName}** accounts for **{userPerformance.topUserPct}%** of all completed activities. 
-              {userPerformance.topUserPct > 50 
-                ? ' This represents an overdependence bottleneck on a single user. Suggest redistributing workloads across other active team members to avoid burnout.'
-                : ' Workload is distributed reasonably across active personnel with zero team bottleneck risks.'}
-            </p>
-          </div>
-
-          {/* Fastest and Slowest Responders (TAT) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
-            <div className="card" style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10B981', fontWeight: 700 }}>
-                <Clock size={18} color="#10B981" /> Fastest Responders (TAT)
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {tatPerformance.top.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
-                    No support tickets resolved yet
-                  </div>
-                ) : tatPerformance.top.map((item, i) => (
-                  <div key={i} style={{ padding: '0.75rem 1rem', backgroundColor: '#ECFDF5', borderRadius: '10px', border: '1px solid #A7F3D0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <strong style={{ fontSize: '0.85rem', color: '#047857' }}>{item.name}</strong>
-                      <div style={{ fontSize: '0.7rem', color: '#065F46' }}>{item.dept} Department</div>
-                    </div>
-                    <span style={{ backgroundColor: '#D1FAE5', color: '#065F46', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 800 }}>
-                      Avg TAT: {item.avgFormatted}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="card" style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#EF4444', fontWeight: 700 }}>
-                <Clock size={18} color="#EF4444" /> Slowest Responders (TAT)
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {tatPerformance.worst.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
-                    No support tickets resolved yet
-                  </div>
-                ) : tatPerformance.worst.map((item, i) => (
-                  <div key={i} style={{ padding: '0.75rem 1rem', backgroundColor: '#FEF2F2', borderRadius: '10px', border: '1px solid #FCA5A5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <strong style={{ fontSize: '0.85rem', color: '#B91C1C' }}>{item.name}</strong>
-                      <div style={{ fontSize: '0.7rem', color: '#991B1B' }}>{item.dept} Department</div>
-                    </div>
-                    <span style={{ backgroundColor: '#FEE2E2', color: '#991B1B', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 800 }}>
-                      Avg TAT: {item.avgFormatted}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* User Daily Trend Visualizer */}
-          <div className="card" style={{ borderTop: '4px solid var(--primary-light)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                <TrendingUp size={18} color="var(--primary-light)" /> Workforce Productivity Heat (7-Day View)
-              </h3>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Daily distribution of completed items across top users</div>
-            </div>
-            <div style={{ height: '300px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={(() => {
-                  const referenceDate = filters.dateEnd ? new Date(filters.dateEnd) : new Date();
-                  const dates = [];
-                  for (let i = 6; i >= 0; i--) {
-                    const d = new Date(referenceDate);
-                    d.setDate(d.getDate() - i);
-                    dates.push(getLocalDateStr(d));
-                  }
-
-                  const topUsers = userPerformance.leaderboard.slice(0, 4).map(u => u.name);
-                  return dates.map(date => {
-                    const dayLogs = filteredData.filter(r => r.Date === date && r.Status === 'Done');
-                    const res = { date };
-                    topUsers.forEach(u => {
-                      res[u] = dayLogs.filter(l => (l.Submitted_By || '').includes(u)).length;
-                    });
-                    return res;
-                  });
-                })()}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                  <XAxis dataKey="date" fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis fontSize={10} tickLine={false} axisLine={false} />
-                  <Tooltip />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px' }} />
-                  {userPerformance.leaderboard.slice(0, 4).map((u, i) => (
-                    <Line key={u.name} type="monotone" dataKey={u.name} stroke={SHIFT_COLORS[i % SHIFT_COLORS.length]} strokeWidth={2.5} dot={{ r: 3 }} />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================
           TAB 5: ACTIVITY & COMPLIANCE ANALYTICS
           ======================================================= */}
       {activeTab === 'compliance' && (
@@ -2108,7 +1821,7 @@ const Dashboard = () => {
                 ) : activityAndAudit.bottleneckList.map((item, i) => (
                   <div key={i} style={{ padding: '0.75rem 1rem', backgroundColor: '#FEF2F2', borderRadius: '10px', border: '1px solid #FEE2E2', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <strong style={{ fontSize: '0.85rem', color: '#991B1B' }}>{item.name}</strong>
+                    <strong style={{ fontSize: '0.85rem', color: '#991B1B' }}>{item.name}</strong>
                       <div style={{ fontSize: '0.7rem', color: '#EF4444' }}>Requires Immediate Resolution Support</div>
                     </div>
                     <span style={{ backgroundColor: '#FEE2E2', color: '#DC2626', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
@@ -2123,255 +1836,11 @@ const Dashboard = () => {
       )}
 
       {/* ========================================================
-          TAB 6: EXCEPTION ALERTS & PREDICTIVE INSIGHTS
-          ======================================================= */}
-      {activeTab === 'insights' && (
-        <div style={{ display: 'grid', gap: '1.5rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
-            <div className="card" style={{ borderLeft: `5px solid ${COLORS.WIP}`, padding: '1.25rem 1.5rem', marginBottom: 0 }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 700 }}>ACTIVITIES STUCK IN PROGRESS (WIP)</span>
-              <div style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0.3rem 0', color: COLORS.WIP }}>{exceptionAlerts.stuckTasksCount}</div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>No update for over 2 hours</div>
-            </div>
-
-            <div className="card" style={{ borderLeft: `5px solid ${COLORS.Support}`, padding: '1.25rem 1.5rem', marginBottom: 0 }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 700 }}>UNTREATED CRITICAL SUPPORT ISSUES</span>
-              <div style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0.3rem 0', color: COLORS.Support }}>{exceptionAlerts.untreatedSupportCount}</div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Awaiting supervisor attention</div>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1.5rem' }}>
-            {/* Failure Prediction Box */}
-            <div className="card" style={{ marginBottom: 0, border: '1px solid #FCA5A5' }}>
-              <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#B91C1C', fontWeight: 700 }}>
-                <AlertTriangle size={18} /> 🔮 Predictive Failure Risks (Low Compliance Items)
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: '#991B1B', marginBottom: '1.25rem' }}>
-                Based on historical completion delays, the following activities are predicted prone to delay during this shift cycle:
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {exceptionAlerts.delayProne.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '2rem', color: '#047857', fontSize: '0.9rem' }}>
-                    ✅ All components exhibit highly consistent historical completion rates.
-                  </div>
-                ) : exceptionAlerts.delayProne.map((item, i) => (
-                  <div key={i} style={{ padding: '0.75rem 1rem', backgroundColor: '#FEF2F2', borderRadius: '10px', border: '1px solid #FECACA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#991B1B' }}>{item.name}</span>
-                    <span style={{ backgroundColor: '#FEE2E2', color: '#DC2626', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 800 }}>
-                      Risk Level: High ({item.rate}% compliance)
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Smart Resource Optimization */}
-            <div className="card" style={{ marginBottom: 0, border: '1px solid #8B5CF6' }}>
-              <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#6D28D9', fontWeight: 700 }}>
-                <Award size={18} color="#8B5CF6" /> Smart Resource Allocation Suggestions
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: '#6D28D9', marginBottom: '1.25rem' }}>
-                Automated recommendation engine suggestions to optimize workload throughput:
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                <div style={{ padding: '0.75rem 1rem', backgroundColor: '#F5F3FF', borderRadius: '10px', border: '1px solid #EDE9FE', fontSize: '0.8rem', color: '#5B21B6', lineHeight: 1.4 }}>
-                  <strong>🔧 Manpower Redistribution:</strong> Historical peaks occur between <strong>10:00 - 12:00</strong>. Suggest adding 1 extra operator to <strong>Line 1</strong> during these hours to increase throughput.
-                </div>
-                <div style={{ padding: '0.75rem 1rem', backgroundColor: '#F5F3FF', borderRadius: '10px', border: '1px solid #EDE9FE', fontSize: '0.8rem', color: '#5B21B6', lineHeight: 1.4 }}>
-                  <strong>⚡ Shift Transition Buffer:</strong> Carry-forward backlog builds up at the end of Shift A. Suggest holding a 15-minute sync overlap buffer before operator swap to clear pending WIP.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* ========================================================
           TAB 7: AGING REPORT
           ======================================================= */}
       {activeTab === 'aging' && (
         <div style={{ display: 'grid', gap: '1.5rem' }}>
-          <div style={{ background: 'linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%)', border: 'none', padding: '1.5rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#FFFFFF', flexWrap: 'wrap', gap: '1rem' }}>
-            <div>
-              <h3 style={{ margin: 0, color: '#FFFFFF', fontWeight: 800 }}>⚠️ Heavy Activity Aging Command Tower</h3>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '2rem', fontWeight: 900, color: '#FFFFFF' }}>
-                {rawData.filter(r => r.Status !== 'Done').length}
-              </div>
-              <span style={{ fontSize: '0.75rem', color: '#BFDBFE', fontWeight: 600, textTransform: 'uppercase' }}>TOTAL BACKLOG ITEMS</span>
-            </div>
-          </div>
-
-          {/* Critical Hotspots Analytical Spotlight Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.25rem' }}>
-            {(() => {
-              const pending = rawData.filter(r => r.Status !== 'Done');
-              const findMaxGroup = (keyName) => {
-                const map = {};
-                pending.forEach(r => {
-                  const val = r[keyName] || 'Unknown';
-                  const diffHrs = (new Date() - new Date(r.Date_Timestamp || r.Date)) / 36e5;
-                  if(!map[val] || map[val] < diffHrs) map[val] = diffHrs;
-                });
-                const sorted = Object.entries(map).sort((a,b) => b[1] - a[1])[0];
-                return sorted ? { name: sorted[0], hrs: Math.round(sorted[1]) } : null;
-              };
-              
-              const maxType = findMaxGroup('Type_of_Activity');
-              const maxLine = findMaxGroup('Line_Equipment');
-              const maxComp = findMaxGroup('Component');
-              
-              return (
-                <>
-                  <div className="card" style={{ borderLeft: '4px solid #DC2626', display: 'flex', gap: '1rem', alignItems: 'center', padding: '1rem 1.25rem' }}>
-                    <div style={{ background: '#FEF2F2', padding: '0.75rem', borderRadius: '12px' }}><AlertTriangle color="#DC2626" size={24} /></div>
-                    <div>
-                      <div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Worst Aging Line</div>
-                      <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1E293B' }}>{maxLine?.name || 'N/A'}</div>
-                      <div style={{ fontSize: '0.7rem', color: '#B91C1C', fontWeight: 600 }}>🔥 Max Age: {Math.round((maxLine?.hrs || 0)/24)} Days</div>
-                    </div>
-                  </div>
-                  <div className="card" style={{ borderLeft: '4px solid #F59E0B', display: 'flex', gap: '1rem', alignItems: 'center', padding: '1rem 1.25rem' }}>
-                    <div style={{ background: '#FFFBEB', padding: '0.75rem', borderRadius: '12px' }}><Clock color="#F59E0B" size={24} /></div>
-                    <div>
-                      <div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Worst Aging Type</div>
-                      <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1E293B' }}>{maxType?.name || 'N/A'}</div>
-                      <div style={{ fontSize: '0.7rem', color: '#D97706', fontWeight: 600 }}>⏳ Waiting Duration: {Math.round((maxType?.hrs || 0)/24)} Days</div>
-                    </div>
-                  </div>
-                  <div className="card" style={{ borderLeft: '4px solid #4F46E5', display: 'flex', gap: '1rem', alignItems: 'center', padding: '1rem 1.25rem' }}>
-                    <div style={{ background: '#EEF2FF', padding: '0.75rem', borderRadius: '12px' }}><Settings color="#4F46E5" size={24} /></div>
-                    <div>
-                      <div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Stuck Component</div>
-                      <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1E293B' }}>{maxComp?.name || 'N/A'}</div>
-                      <div style={{ fontSize: '0.7rem', color: '#4338CA', fontWeight: 600 }}>⚠️ Longest Cycle Blockage</div>
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-
-          {/* Comprehensive Breakdown Table */}
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', fontWeight: 800 }}><Activity color="#EF4444" /> Long-Tail Aging Decomposition Matrix</h3>
-            </div>
-            
-            <div style={{ fontSize: '0.85rem', color: '#64748B', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.25rem', lineHeight: 1.4 }}>
-              ℹ️ <strong>Performance Analysis Guidance:</strong> Aging reports represent pending operational cycles. <strong>Lower Aging Days are better</strong> (indicating agile task closure), while <strong>Higher Waiting Days are worst</strong> (signifying stagnant work-in-progress and risk).
-            </div>
-
-            {(() => {
-              const map = {};
-              rawData.filter(r => r.Status !== 'Done').forEach(r => {
-                const key = `${r.Activity_Description || 'Unk'} @ ${r.Component || 'Unk'}`;
-                if(!map[key]) map[key] = { desc: r.Activity_Description, comp: r.Component, freq: r.Frequency, line: r.Line_Equipment, subLine: r.Sub_Line_Equipment, type: r.Type_of_Activity, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 };
-                const diffHrs = (new Date() - new Date(r.Date_Timestamp || r.Date)) / 36e5;
-                if (diffHrs < 8) map[key].s1++;
-                else if (diffHrs < 168) map[key].s2++; // 7 Days
-                else if (diffHrs < 720) map[key].s3++; // 30 Days
-                else if (diffHrs < 4320) map[key].s4++; // 6 Months
-                else map[key].s5++; // >6 Months
-              });
-              const rows = Object.values(map).sort((a,b) => (b.s5*100 + b.s4*10 + b.s3) - (a.s5*100 + a.s4*10 + a.s3));
-              
-              if (rows.length === 0) {
-                return <div style={{ padding: '3rem', textAlign: 'center', color: '#94A3B8', fontSize: '0.9rem' }}>🎉 Operation Clean: Zero backlog items currently identified across all tracked components.</div>;
-              }
-
-              // ===================================================
-              // MOBILE VIEW: STACKED RICHCARDS (No Horizontal Scroll)
-              // ===================================================
-              if (isMobile) {
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {rows.map((row, idx) => {
-                      const isCritical = row.s4 > 0 || row.s5 > 0;
-                      const isSevere = row.s3 > 0;
-                      return (
-                        <div key={idx} style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1rem', background: isCritical ? '#FEF2F2' : '#FFF' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                            <div>
-                              <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1E293B' }}>{row.comp}</div>
-                              <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{row.line} • {row.subLine || 'No Subline'} • {row.type}</div>
-                            </div>
-                            <span style={{ 
-                              padding: '0.25rem 0.5rem', borderRadius: '6px', fontSize: '0.65rem', fontWeight: 800, color: '#FFF',
-                              backgroundColor: isCritical ? '#991B1B' : isSevere ? '#EA580C' : row.s2 > 0 ? '#D97706' : '#10B981' 
-                            }}>{isCritical ? 'CRITICAL' : isSevere ? 'ELEVATED' : 'STABLE'}</span>
-                          </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', backgroundColor: '#F8FAFC', padding: '0.75rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 700, textAlign: 'center' }}>
-                            <div><div style={{color: '#64748B', fontSize: '0.6rem'}}>{' < 8 HR'}</div>{row.s1 || '-'}</div>
-                            <div><div style={{color: '#D97706', fontSize: '0.6rem'}}>1-7 DAY</div>{row.s2 || '-'}</div>
-                            <div><div style={{color: '#EA580C', fontSize: '0.6rem'}}>8-30 DAY</div>{row.s3 || '-'}</div>
-                            <div><div style={{color: '#DC2626', fontSize: '0.6rem'}}>1-6 MO</div>{row.s4 || '-'}</div>
-                            <div><div style={{color: '#991B1B', fontSize: '0.6rem'}}>{'> 6 MO'}</div>{row.s5 || '-'}</div>
-                            <div><div style={{color: '#94A3B8', fontSize: '0.6rem'}}>FREQ</div>{row.freq}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              }
-
-              // ===================================================
-              // DESKTOP VIEW: STANDARD TABLE
-              // ===================================================
-              return (
-                <div className="table-container-responsive">
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '2px solid #E2E8F0' }}>
-                        <th style={{ padding: '0.8rem 1rem' }}>Line Equipment</th>
-                        <th style={{ padding: '0.8rem 1rem' }}>Sub-Line Equipment</th>
-                        <th style={{ padding: '0.8rem 1rem' }}>Component</th>
-                        <th style={{ padding: '0.8rem 1rem' }}>Activity Description</th>
-                        <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem', borderLeft: '1px solid #F1F5F9' }}>{'< 8 HR'}</th>
-                        <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'1-7 DAY'}</th>
-                        <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'8-30 DAY'}</th>
-                        <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>{'1-6 MO'}</th>
-                        <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.7rem', color: '#DC2626' }}>{'> 6 MO'}</th>
-                        <th style={{ padding: '0.8rem 1rem', textAlign: 'right' }}>Action Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row, idx) => {
-                        const isCritical = row.s4 > 0 || row.s5 > 0;
-                        const isSevere = row.s3 > 0;
-                        return (
-                          <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#1E293B' }}>{row.line || '-'}</td>
-                            <td style={{ padding: '0.75rem 1rem', color: '#475569' }}>{row.subLine || '-'}</td>
-                            <td style={{ padding: '0.75rem 1rem', color: '#475569', fontWeight: 600 }}>{row.comp || '-'}</td>
-                            <td style={{ padding: '0.75rem 1rem' }}>
-                              <div style={{ fontSize: '0.8rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }} title={row.desc}>{row.desc}</div>
-                              <div style={{ fontSize: '0.65rem', color: '#94A3B8' }}>{row.type} • {row.freq}</div>
-                            </td>
-                            <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s1 ? '#64748B' : '#E2E8F0', fontWeight: row.s1 ? 700 : 400, borderLeft: '1px solid #F8FAFC' }}>{row.s1 || '-'}</td>
-                            <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s2 ? '#D97706' : '#E2E8F0', fontWeight: row.s2 ? 700 : 400 }}>{row.s2 || '-'}</td>
-                            <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s3 ? '#EA580C' : '#E2E8F0', fontWeight: row.s3 ? 800 : 400 }}>{row.s3 || '-'}</td>
-                            <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s4 ? '#DC2626' : '#E2E8F0', fontWeight: row.s4 ? 900 : 400, background: row.s4 ? '#FEF2F2' : 'transparent' }}>{row.s4 || '-'}</td>
-                            <td style={{ padding: '0.75rem', textAlign: 'center', color: row.s5 ? '#991B1B' : '#E2E8F0', fontWeight: row.s5 ? 900 : 400, background: row.s5 ? '#FEE2E2' : 'transparent' }}>{row.s5 || '-'}</td>
-                            <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                              <span style={{ 
-                                padding: '0.25rem 0.5rem', borderRadius: '6px', fontSize: '0.65rem', fontWeight: 800, color: '#FFF',
-                                backgroundColor: isCritical ? '#991B1B' : isSevere ? '#EA580C' : row.s2 > 0 ? '#D97706' : '#10B981' 
-                              }}>
-                                {isCritical ? 'CRITICAL DEBT' : isSevere ? 'ELEVATED' : 'STABLE'}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })()}
-          </div>
+          <Section10AgingReport submissions={filteredData.length ? filteredData : rawData} />
         </div>
       )}
 
@@ -2380,142 +1849,7 @@ const Dashboard = () => {
           ======================================================== */}
       {activeTab === 'review_perf' && (
         <div style={{ display: 'grid', gap: '1.5rem' }}>
-          {/* Reviewer Metrics Overview Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
-            <div className="card" style={{ borderLeft: '5px solid #6366F1', padding: '1.5rem', marginBottom: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                <span>Total In Review Pipeline</span>
-                <Shield size={16} />
-              </div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0.5rem 0' }}>{reviewPerformanceStats.totalSubmissionsForReview}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Total submissions in reviewer scopes</div>
-            </div>
-
-            <div className="card" style={{ borderLeft: '5px solid #10B981', padding: '1.5rem', marginBottom: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                <span>Completed Reviews</span>
-                <CheckCircle size={16} color="#10B981" />
-              </div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: '#10B981', margin: '0.5rem 0' }}>{reviewPerformanceStats.totalReviewed}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Activities successfully reviewed</div>
-            </div>
-
-            <div className="card" style={{ borderLeft: '5px solid #F59E0B', padding: '1.5rem', marginBottom: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                <span>Pending Review Queue</span>
-                <Clock size={16} color="#F59E0B" />
-              </div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: '#F59E0B', margin: '0.5rem 0' }}>{reviewPerformanceStats.totalPendingReview}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Waiting for reviewer action</div>
-            </div>
-
-            <div className="card" style={{ borderLeft: '5px solid #3B82F6', padding: '1.5rem', marginBottom: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                <span>Overall Compliance</span>
-                <Award size={16} color="#3B82F6" />
-              </div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: '#3B82F6', margin: '0.5rem 0' }}>{reviewPerformanceStats.overallReviewCompliance}%</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Percentage of completed reviews</div>
-            </div>
-          </div>
-
-          {/* Mid row graphs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
-            {/* Leaderboard Card */}
-            <div className="card" style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
-                <Users size={18} color="#10B981" /> Top Reviewers Performance
-              </h3>
-              {reviewPerformanceStats.reviewerLeaderboard.length === 0 ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>No reviewers have completed reviews yet.</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '320px', overflowY: 'auto' }}>
-                  {reviewPerformanceStats.reviewerLeaderboard.map((reviewer, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid #F1F5F9' }}>
-                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                        <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem' }}>#{idx+1}</div>
-                        <div>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>{reviewer.name}</div>
-                          <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.65rem', marginTop: '0.15rem' }}>
-                            <span style={{ color: '#059669', fontWeight: 600 }}>{reviewer.approved} Approved</span>
-                            <span style={{ color: '#DC2626', fontWeight: 600 }}>{reviewer.rejected} Rejected</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#1E293B' }}>{reviewer.total}</div>
-                        <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>TOTAL REVIEWS</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Status breakdown Pie */}
-            <div className="card" style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
-                <Activity size={18} color="#6366F1" /> Review Status Distribution
-              </h3>
-              <div style={{ height: '280px', position: 'relative' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={reviewPerformanceStats.reviewStatusData}
-                      cx="50%" cy="50%"
-                      innerRadius={60} outerRadius={80}
-                      paddingAngle={4}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                    >
-                      {reviewPerformanceStats.reviewStatusData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.name === 'Approved' ? '#10B981' : entry.name === 'Needs Correction' ? '#EF4444' : '#F59E0B'} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend verticalAlign="bottom" height={36} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom chart */}
-          <div className="card" style={{ padding: '1.5rem' }}>
-            <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
-              <TrendingUp size={18} color="var(--primary-light)" /> 7-Day Review Trend
-            </h3>
-            <div style={{ height: '300px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={reviewPerformanceStats.reviewTrend} margin={{ left: -10, right: 10 }}>
-                  <defs>
-                    <linearGradient id="colorReviewed" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.6}/>
-                      <stop offset="95%" stopColor="#10B981" stopOpacity={0.0}/>
-                    </linearGradient>
-                    <linearGradient id="colorPendingReview" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.6}/>
-                      <stop offset="95%" stopColor="#F59E0B" stopOpacity={0.0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                  <XAxis dataKey="date" fontSize={10} axisLine={false} tickLine={false} />
-                  <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.08)' }} 
-                    formatter={(value, name, props) => {
-                      const total = (props.payload.Reviewed || 0) + (props.payload.Pending || 0);
-                      const pct = total ? Math.round((value / total) * 100) : 0;
-                      return [`${value} (${pct}%)`, name];
-                    }}
-                  />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                  <Area type="monotone" dataKey="Reviewed" stackId="review" stroke="#10B981" fill="url(#colorReviewed)" name="Reviewed Tasks" strokeWidth={2.5} />
-                  <Area type="monotone" dataKey="Pending" stackId="review" stroke="#F59E0B" fill="url(#colorPendingReview)" name="Unreviewed/Pending" strokeWidth={2.5} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <Section11ReviewerPerformance submissions={filteredData.length ? filteredData : rawData} checklists={masterChecklists} employees={employees} reviewers={reviewers} />
         </div>
       )}
     </div>
