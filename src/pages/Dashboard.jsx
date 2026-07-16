@@ -14,6 +14,7 @@ import {
 
 import { useData } from '../context/DataContext';
 import AdvancedAnalyticsDashboard, { Section10AgingReport, Section11ReviewerPerformance } from '../components/AdvancedAnalyticsDashboard';
+import FireSafetyDashboardContainer from '../components/firesafety/FireSafetyDashboardContainer';
 
 const getLocalDateStr = (d) => {
   const y = d.getFullYear();
@@ -132,7 +133,7 @@ const generateFireSafetyMockData = () => {
 const Dashboard = () => {
   const { user } = useAuth();
   const { submissions: rawData = [], supportInbox = [], checklists: masterChecklists = [], reviewers = [], employees = [], shifts = [] } = useData();
-  const [activeTab, setActiveTab] = useState('advanced');
+  const [activeTab, setActiveTab] = useState('firesafety');
   const [fsTrendRange, setFsTrendRange] = useState('MTD');
   const [fsAreaRange, setFsAreaRange] = useState('MTD');
   const [showFilters, setShowFilters] = useState(false);
@@ -1249,6 +1250,9 @@ const Dashboard = () => {
           TAB 1.5: FIRE SAFETY ANALYTICS
           ======================================================== */}
       {activeTab === 'firesafety' && (
+        <FireSafetyDashboardContainer />
+      )}
+      {false && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
           {/* Row 1: KPI Cards */}
